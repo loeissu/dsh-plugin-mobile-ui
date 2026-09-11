@@ -198,6 +198,17 @@ export const FEATURES = {
   /** Settings page in `settings.section`. Additive. */
   settings: true,
   /**
+   * Keep the app shell inside the visual viewport so the keyboard cannot cover
+   * the composer.
+   *
+   * Touches no slot: it injects a narrow-screen stylesheet and a
+   * `visualViewport` listener. The underlying defect is in the Android shell
+   * (no `windowSoftInputMode`), and the definitive fix is native; this is the
+   * mitigation that works without an APK rebuild. Inert when the WebView does
+   * not report the keyboard — see `src/client/viewport.ts`.
+   */
+  keyboardFit: true,
+  /**
    * Tool names whose shipped card this plugin replaces in
    * `tool.call.toolview`. A key the shipped composition already covers is
    * replaced, not shared — so every name listed here LOSES DSH's own card.

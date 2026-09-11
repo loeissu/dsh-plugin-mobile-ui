@@ -36,6 +36,7 @@ import { DrawerOverlay } from './DrawerOverlay.tsx'
 import { SECTION_OPTIONS, SettingsSection } from './Settings.tsx'
 import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
+import { installKeyboardFit } from './viewport.ts'
 
 /**
  * Required services.
@@ -83,6 +84,12 @@ const SHADOW_PRIORITY = -100
  * @param ctx - Client root context.
  */
 export function apply(ctx: ClientContext): void {
+  // Keyboard fit installs no slot: it is a stylesheet plus a viewport listener,
+  // registered as an effect so it is disposed with the plugin.
+  if (FEATURES.keyboardFit) {
+    ctx.effect(() => installKeyboardFit(), 'mobile-ui: keyboard fit')
+  }
+
   if (FEATURES.splash) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
