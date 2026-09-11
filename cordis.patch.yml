@@ -1,0 +1,13 @@
+# Profile-layer patch for the mobile UI plugin.
+#
+# A client UI plugin needs BOTH declarations:
+#   dsh.bundle.patch (this file) -> the Loader mounts a host-side row for the
+#     package, which is what makes it a profile layer at all.
+#   dsh.client (package.json)    -> the dsh-client-modules node half scans the
+#     row into window.__DSH_BOOT__ and serves its browser half at
+#     /plugins/<package>/client.js.
+# Without the bundle patch the CLI installs the package as a plain dependency
+# and never activates it.
+- insert:
+    - id: mobile-ui
+      name: dsh-plugin-mobile-ui
