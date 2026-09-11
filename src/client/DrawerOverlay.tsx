@@ -225,11 +225,19 @@ const CSS = `
 
   /* Section labels pin to the top while their rows scroll under them, so the
      reader always knows which group the visible rows belong to. Opaque
-     background is required: a sticky label scrolls OVER the rows. */
+     background is required: a sticky label scrolls OVER the rows.
+
+     pointer-events: none is load-bearing, not cosmetic. Without it the label is
+     the topmost element over the scroll area and swallows touch drags.
+     Measured with the label hit-testable: a synthesized touch drag inside the
+     body left scrollTop at 0 across 212px of overflow, while programmatic
+     scrolling still reached 212. That is precisely the "it does not scroll"
+     report — the container scrolled, the finger could not reach it. */
   .dsh-mobile-drawer-label {
     position: sticky;
     top: 0;
     z-index: 1;
+    pointer-events: none;
     background: ${V.surface};
     font-size: 11px;
     letter-spacing: 0.04em;
