@@ -82,6 +82,25 @@ const NARROW = '(max-width: 768px)'
 const MARQUEE_MIN_PX = 4
 
 const CSS = `
+/* ── the drawer exists only on narrow screens ──────────────────────────────
+   HIDDEN BY DEFAULT, enabled by the media query below — not the other way round.
+
+   The component registers into shell.overlay unconditionally, so its DOM is
+   always present. While every styling rule sat inside the media query, a wide
+   viewport got the markup with none of the CSS: the root fell back to
+   \`display: block; position: static\` and the whole workspace/session list
+   rendered as unstyled text in the document flow. Measured at 1440px: root
+   1432x249 at top=900, painted, carrying 245 characters of visible text.
+
+   It also left \`pointer-events: auto\` on the panel, because that rule lived in
+   the media query too — so the invisible-but-present layer could intercept
+   clicks.
+
+   \`display: none\` removes the subtree from rendering AND from hit-testing, so
+   one rule answers both. A wide screen keeps the native sidebar and never sees
+   this component at all. */
+.dsh-mobile-drawer-root { display: none; }
+
 /* ── native sidebar suppression (narrow screens only) ──────────────────────
    Hiding the sidebar column alone is NOT enough. Removing a grid item from
    flow does not free its track: the frame keeps its three-column template and
@@ -111,6 +130,8 @@ const CSS = `
 
 @media ${NARROW} {
   .dsh-mobile-drawer-root {
+    /* Re-enable the subtree the base rule hid. */
+    display: block;
     position: fixed;
     /* Sized to the VISIBLE band, not the layout viewport.
        \`inset: 0\` resolves against the layout viewport, which this shell does not

@@ -215,6 +215,37 @@ await sleep(1500)
 const desktop = JSON.parse(await evaluate(STATE))
 console.log(`  ${JSON.stringify({ viewport: desktop.viewport, sidebar: desktop.sidebarDisplay, template: desktop.frameTemplate, panelPointerEvents: desktop.panelPointerEvents }, null, 1)}`)
 check(desktop.sidebarDisplay !== 'none', 'native sidebar is NOT hidden at desktop width', `display=${desktop.sidebarDisplay}`)
+
+// The assertion that was missing when this leaked.
+//
+// Checking only that the native sidebar survives says nothing about OUR markup.
+// The component registers unconditionally, so its DOM exists at every width; if
+// the rules that hide it ever move back inside the media query, the whole
+// workspace/session list renders as unstyled text in the document flow — 1432px
+// wide, 245 characters of it, below the fold. Presence in the DOM is therefore
+// the wrong question; whether it PAINTS is the right one.
+const leak = JSON.parse(await evaluate(`(() => {
+  const root = document.querySelector('[data-dsh-mobile-ui="drawer-overlay"]')
+  const panel = document.querySelector('[data-dsh-mobile-ui="drawer-panel"]')
+  const box = (el) => {
+    if (el === null) return null
+    const cs = getComputedStyle(el)
+    const r = el.getBoundingClientRect()
+    return {
+      display: cs.display,
+      painted: cs.display !== 'none' && cs.visibility !== 'hidden' && (r.width > 0 || r.height > 0),
+      w: Math.round(r.width),
+      h: Math.round(r.height),
+      pointerEvents: cs.pointerEvents,
+    }
+  }
+  return JSON.stringify({ root: box(root), panel: box(panel) })
+})()`))
+console.log(`  drawer at desktop width: ${JSON.stringify(leak)}`)
+check(leak.root !== null && leak.root.painted === false,
+  'the drawer is not painted at desktop width', `root=${JSON.stringify(leak.root)}`)
+check(leak.panel !== null && leak.panel.painted === false,
+  'the drawer panel is not painted at desktop width', `panel=${JSON.stringify(leak.panel)}`)
 await shoot('04-desktop')
 
 // ── errors ─────────────────────────────────────────────────────────────────
