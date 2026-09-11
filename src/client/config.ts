@@ -149,7 +149,7 @@ export const FEATURES = {
    * replaced, not shared — so every name listed here LOSES DSH's own card.
    * An empty array leaves every shipped tool card untouched.
    */
-  toolCards: [] as readonly string[],
+  toolCards: ['pwsh', 'read', 'grep', 'edit', 'write'] as readonly string[],
   /**
    * Replace the whole navigation column via the `sidebar` slot.
    *

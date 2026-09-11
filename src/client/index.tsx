@@ -43,6 +43,16 @@ export const inject = ['slots']
 const SPLASH_ORDER = 10
 
 /**
+ * Priority for tool-card registrations.
+ *
+ * Must be lower than any shipped `tool.call.toolview` entry, because a keyed
+ * cell rejects a second entry at the same priority with a thrown error rather
+ * than shadowing it. Lower values render, so this both avoids the collision and
+ * takes the cell.
+ */
+const TOOL_CARD_PRIORITY = -100
+
+/**
  * Install this plugin's surfaces.
  *
  * Each surface is independent: a slot missing on the running DSH build removes
@@ -63,12 +73,21 @@ export function apply(ctx: ClientContext): void {
       ctx.slots.register(SECTION_OPTIONS, SettingsSection))
   }
 
-  // Keyed dispatch: one registration per tool name, each REPLACING that tool's
+  // Keyed dispatch: one registration per tool name, each shadowing that tool's
   // shipped card. Empty by default, so nothing shipped is displaced.
+  //
+  // Priority is load-bearing, not cosmetic. A keyed cell accepts only ONE entry
+  // per priority: registering at the same priority as the shipped entry throws
+  //   keyed slot "tool.call.toolview" already has an entry for key "read"
+  //   at priority 0 (registered by ...) — register at a different priority to
+  //   shadow it (lowest renders)
+  // so a would-be replacement must come in BELOW the shipped entry. Lower
+  // priority renders, so a negative value both avoids the collision and wins
+  // the cell.
   for (const toolName of FEATURES.toolCards) {
     ctx.slots.inject('tool.call.toolview', () =>
       ctx.slots.register(
-        { name: 'tool.call.toolview', key: toolName },
+        { name: 'tool.call.toolview', key: toolName, priority: TOOL_CARD_PRIORITY },
         ToolCard,
       ))
   }

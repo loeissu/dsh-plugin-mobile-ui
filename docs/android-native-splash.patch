@@ -1,0 +1,209 @@
+diff --git a/app/src-tauri/gen/android/app/build.gradle.kts b/app/src-tauri/gen/android/app/build.gradle.kts
+index 0618a9e..292b46c 100644
+--- a/app/src-tauri/gen/android/app/build.gradle.kts
++++ b/app/src-tauri/gen/android/app/build.gradle.kts
+@@ -97,6 +97,10 @@ dependencies {
+     implementation("androidx.activity:activity-ktx:1.10.1")
+     implementation("com.google.android.material:material:1.12.0")
+     implementation("androidx.lifecycle:lifecycle-process:2.10.0")
++    // Launch screen (windowSplashScreenBackground + postSplashScreenTheme).
++    // Backports the API 31 splash-screen attributes to minSdk 24, so the launch
++    // path does not depend on the device's Android version.
++    implementation("androidx.core:core-splashscreen:1.0.1")
+     testImplementation("junit:junit:4.13.2")
+     androidTestImplementation("androidx.test.ext:junit:1.1.4")
+     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.0")
+diff --git a/app/src-tauri/gen/android/app/src/main/AndroidManifest.xml b/app/src-tauri/gen/android/app/src/main/AndroidManifest.xml
+index 0837b84..a506d0d 100644
+--- a/app/src-tauri/gen/android/app/src/main/AndroidManifest.xml
++++ b/app/src-tauri/gen/android/app/src/main/AndroidManifest.xml
+@@ -16,6 +16,7 @@
+             android:launchMode="singleTask"
+             android:label="@string/main_activity_title"
+             android:name=".MainActivity"
++            android:theme="@style/Theme.dsh_tether_app.Splash"
+             android:exported="true">
+             <intent-filter>
+                 <action android:name="android.intent.action.MAIN" />
+diff --git a/app/src-tauri/gen/android/app/src/main/java/cc/zexa/dshtether/MainActivity.kt b/app/src-tauri/gen/android/app/src/main/java/cc/zexa/dshtether/MainActivity.kt
+index 7e433e0..491cc8c 100644
+--- a/app/src-tauri/gen/android/app/src/main/java/cc/zexa/dshtether/MainActivity.kt
++++ b/app/src-tauri/gen/android/app/src/main/java/cc/zexa/dshtether/MainActivity.kt
+@@ -2,9 +2,15 @@ package cc.zexa.dshtether
+ 
+ import android.os.Bundle
+ import androidx.activity.enableEdgeToEdge
++import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+ 
+ class MainActivity : TauriActivity() {
+   override fun onCreate(savedInstanceState: Bundle?) {
++    // installSplashScreen() must run BEFORE super.onCreate: it swaps the launch
++    // theme for postSplashScreenTheme and holds the launch screen until the
++    // first frame is drawn. Called after super, the activity has already laid
++    // out against the launch theme and the handoff becomes a visible flash.
++    installSplashScreen()
+     enableEdgeToEdge()
+     super.onCreate(savedInstanceState)
+   }
+diff --git a/app/src-tauri/gen/android/app/src/main/res/drawable/splash_mark.xml b/app/src-tauri/gen/android/app/src/main/res/drawable/splash_mark.xml
+new file mode 100644
+index 0000000..eb2c2d7
+--- /dev/null
++++ b/app/src-tauri/gen/android/app/src/main/res/drawable/splash_mark.xml
+@@ -0,0 +1,32 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  Launch-screen mark: two overlapping rings.
++
++  This is the same geometry the client plugin's HTML splash draws
++  (Splash.tsx: circles at 19,24 and 29,24 with r=11.5 in a 48 viewport), scaled
++  into a 108x108 viewport and sized to about 41% of the canvas so it stays
++  inside the API 31+ splash icon's visible safe area rather than being cropped
++  by the circular mask.
++
++  Geometry is derived, not eyeballed: the source mark spans 33 units wide in a
++  48 viewport; scale 1.2 about the centre (54,54) yields circles at 46.8 and
++  61.2 with r=13.8 and a 2.88 stroke, a 44.9-unit footprint.
++-->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp"
++    android:height="108dp"
++    android:viewportWidth="108"
++    android:viewportHeight="108">
++
++    <path
++        android:pathData="M46.8,40.2 A13.8,13.8 0 1,1 46.8,67.8 A13.8,13.8 0 1,1 46.8,40.2 Z"
++        android:strokeColor="@color/splash_mark"
++        android:strokeWidth="2.88"
++        android:strokeAlpha="1.0" />
++
++    <path
++        android:pathData="M61.2,40.2 A13.8,13.8 0 1,1 61.2,67.8 A13.8,13.8 0 1,1 61.2,40.2 Z"
++        android:strokeColor="@color/splash_mark"
++        android:strokeWidth="2.88"
++        android:strokeAlpha="0.7" />
++</vector>
+diff --git a/app/src-tauri/gen/android/app/src/main/res/values-night/splash.xml b/app/src-tauri/gen/android/app/src/main/res/values-night/splash.xml
+new file mode 100644
+index 0000000..a58d152
+--- /dev/null
++++ b/app/src-tauri/gen/android/app/src/main/res/values-night/splash.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  Android launch-screen colors, dark scheme.
++
++  The dark values mirror DSH's dark boot surface (#151517) and its dark brand
++  accent, so the night launch path shows the same brand as the light one instead
++  of the near-black-on-black the previous empty theme produced.
++-->
++<resources>
++    <color name="splash_background">#FF151517</color>
++    <color name="splash_mark">#FF5686FE</color>
++    <color name="window_background">#FF151517</color>
++</resources>
+diff --git a/app/src-tauri/gen/android/app/src/main/res/values-night/themes.xml b/app/src-tauri/gen/android/app/src/main/res/values-night/themes.xml
+index d43d23c..0240c6e 100644
+--- a/app/src-tauri/gen/android/app/src/main/res/values-night/themes.xml
++++ b/app/src-tauri/gen/android/app/src/main/res/values-night/themes.xml
+@@ -1,6 +1,22 @@
++<?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <!-- Base application theme. -->
++
++    <!--
++      Dark-scheme base theme.
++
++      This file previously held a byte-identical copy of the light theme, so the
++      night path drew dark status-bar icons on a dark window — invisible. It now
++      mirrors the light structure with the dark light-status-bar flag; the
++      colors themselves resolve per configuration through values-night.
++    -->
+     <style name="Theme.dsh_tether_app" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+-        <!-- Customize your theme here. -->
++        <item name="android:windowBackground">@color/window_background</item>
++        <item name="android:navigationBarColor">@android:color/transparent</item>
++        <item name="android:statusBarColor">@android:color/transparent</item>
++        <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
+     </style>
++
++    <!-- The launch theme needs no night declaration: windowSplashScreenBackground
++         and the mark resolve through the values-night color resources. -->
++
+ </resources>
+diff --git a/app/src-tauri/gen/android/app/src/main/res/values/splash.xml b/app/src-tauri/gen/android/app/src/main/res/values/splash.xml
+new file mode 100644
+index 0000000..2f2a1dc
+--- /dev/null
++++ b/app/src-tauri/gen/android/app/src/main/res/values/splash.xml
+@@ -0,0 +1,28 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++  Android launch-screen colors.
++
++  These must match the Web UI's own boot surface, which DSH defines as
++  the boot background token (#fff light, #151517 dark) in its shipped
++  frontend. Keeping the native window background identical to the HTML boot
++  background is what removes the white flash between the system splash and the
++  first painted frame.
++
++  The accent matches DSH's brand accent alias (light #4176E6, dark
++  rgb(86,134,254) = #5686FE), so the mark drawn natively and the mark drawn by
++  the client plugin are the same color.
++
++  NOTE: Android XML comments may not contain a double hyphen, so DSH's own
++  custom-property names (which are written with that prefix) cannot be quoted
++  verbatim here.
++-->
++<resources>
++    <!-- Launch screen background: identical to DSH's boot surface. -->
++    <color name="splash_background">#FFFFFFFF</color>
++    <!-- Brand mark stroke. -->
++    <color name="splash_mark">#FF4176E6</color>
++
++    <!-- Base window background. Equal to splash_background so the handoff from
++         the splash to the WebView has no visible seam. -->
++    <color name="window_background">#FFFFFFFF</color>
++</resources>
+diff --git a/app/src-tauri/gen/android/app/src/main/res/values/themes.xml b/app/src-tauri/gen/android/app/src/main/res/values/themes.xml
+index d43d23c..d4eb6eb 100644
+--- a/app/src-tauri/gen/android/app/src/main/res/values/themes.xml
++++ b/app/src-tauri/gen/android/app/src/main/res/values/themes.xml
+@@ -1,6 +1,35 @@
++<?xml version="1.0" encoding="utf-8"?>
+ <resources xmlns:tools="http://schemas.android.com/tools">
+-    <!-- Base application theme. -->
++
++    <!--
++      Base application theme.
++
++      windowBackground is pinned to the same color the launch screen uses, so
++      the window behind the WebView is already the right color the moment the
++      splash hands off. It was previously unset, which is what produced a white
++      flash before the interface painted.
++    -->
+     <style name="Theme.dsh_tether_app" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+-        <!-- Customize your theme here. -->
++        <item name="android:windowBackground">@color/window_background</item>
++        <item name="android:navigationBarColor">@android:color/transparent</item>
++        <item name="android:statusBarColor">@android:color/transparent</item>
++        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+     </style>
++
++    <!--
++      Launch screen theme, installed by MainActivity via installSplashScreen().
++
++      core-splashscreen backports this to API 24 (the app's minSdk), so the
++      launch path is identical on every supported device and not only on
++      API 31+.
++
++      postSplashScreenTheme must name the base theme; the library swaps to it
++      once the first frame is ready.
++    -->
++    <style name="Theme.dsh_tether_app.Splash" parent="Theme.SplashScreen">
++        <item name="windowSplashScreenBackground">@color/splash_background</item>
++        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
++        <item name="postSplashScreenTheme">@style/Theme.dsh_tether_app</item>
++    </style>
++
+ </resources>

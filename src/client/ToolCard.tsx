@@ -1,14 +1,22 @@
 /**
  * Tool call card, registered into the `keyed` slot `tool.call.toolview`.
  *
- * ## Replacement semantics — read this before widening {@link FEATURES}
+ * ## Shadowing semantics — read this before widening `FEATURES.toolCards`
  *
- * The slot's contract says: "A key the shipped composition already covers is
- * replaced, not shared; an unclaimed key falls back to the generic tool row."
- * So registering `key: 'bash'` does not add a card beside DSH's — it REPLACES
- * DSH's own terminal card for `bash`. Only the tool names listed in
- * `config.ts` → `FEATURES.toolCards` are taken over, and that list is empty by
- * default, so nothing is displaced until someone opts in.
+ * The slot's documented contract says "a key the shipped composition already
+ * covers is replaced, not shared", but the RUNTIME is stricter than that
+ * sentence suggests: a keyed cell admits only one entry per priority, and a
+ * second registration at the same priority is a hard error, not a shadow:
+ *
+ *   keyed slot "tool.call.toolview" already has an entry for key "read" at
+ *   priority 0 (registered by ...) — register at a different priority to
+ *   shadow it (lowest renders)
+ *
+ * This was observed on a live instance, not inferred. Because lower priority
+ * renders, taking over a shipped key means registering BELOW it — see
+ * `TOOL_CARD_PRIORITY` in `index.tsx`. Only the names listed in
+ * `FEATURES.toolCards` are taken over, and that list is empty by default, so
+ * nothing shipped is displaced until someone opts in.
  *
  * ## Why the prop type is declared here
  *
@@ -182,8 +190,41 @@ const CSS = `
 }
 `
 
-/** Argument fields that make a readable one-line summary, in priority order. */
+/**
+ * Argument fields that make a readable one-line summary, in priority order.
+ * Path-bearing fields are shortened against the session cwd before display.
+ */
 const SUMMARY_FIELDS = ['command', 'cmd', 'file_path', 'path', 'pattern', 'query', 'url', 'prompt'] as const
+
+/**
+ * Shorten a path so it survives a ~200px summary row.
+ *
+ * The summary element is roughly 200px wide on a 412px phone at a 13px face, so
+ * only about 22 characters fit. Absolute paths in tool arguments routinely
+ * exceed 120 characters: unshortened they overflow about 3x, and the ellipsis
+ * leaves only a useless `C:\Users\...` prefix.
+ *
+ * Relativising against the session cwd (supplied in the owner props) is the
+ * first cut; because even a relative repository path overflows, the displayed
+ * form is then reduced to at most two trailing segments — the directory that
+ * disambiguates plus the filename, which is what a reader scans for.
+ * @param value - the raw argument value.
+ * @param cwd - session workspace root, when the owner supplied one.
+ * @param home - host home directory, when the owner supplied one.
+ * @returns the display form.
+ */
+function shortenPath(value: string, cwd?: string, home?: string): string {
+  let out = value
+  if (cwd !== undefined && cwd !== '' && out.startsWith(cwd)) {
+    const rest = out.slice(cwd.length).replace(/^[\\/]+/, '')
+    if (rest !== '') out = rest
+  } else if (home !== undefined && home !== '' && out.startsWith(home)) {
+    out = `~${out.slice(home.length)}`
+  }
+  const parts = out.split(/[\\/]/).filter((p) => p !== '')
+  if (parts.length <= 2) return parts.join('/')
+  return `…/${parts.slice(-2).join('/')}`
+}
 
 /**
  * Whether a block is the settled arm.
@@ -228,23 +269,56 @@ function blockArgs(block: SettledBlock | RunningBlock): string {
  * @param raw - raw argument text.
  * @returns the salient detail, or an empty string when none is recognisable.
  */
-function summarize(raw: string): string {
+/**
+ * Build a one-line summary from the raw arguments.
+ *
+ * `argsRaw` is a JSON string in the normal case, but is treated as opaque text
+ * when it does not parse, because window truncation and unknown tools can both
+ * produce other shapes.
+ * @param raw - raw argument text.
+ * @param cwd - session workspace root, for path shortening.
+ * @param home - host home directory, for path shortening.
+ * @returns the salient detail, or an empty string when none is recognisable.
+ */
+function summarize(raw: string, cwd?: string, home?: string): string {
   if (raw === '') return ''
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)
   } catch {
-    return raw.length > 90 ? `${raw.slice(0, 90)}…` : raw
+    const oneLine = shortenPath(raw, cwd, home).replace(/\s*\n\s*/g, ' ⏎ ')
+    return oneLine.length > 90 ? `${oneLine.slice(0, 90)}…` : oneLine
   }
   if (parsed === null || typeof parsed !== 'object') return ''
   const record = parsed as Record<string, unknown>
   for (const field of SUMMARY_FIELDS) {
     const value = record[field]
     if (typeof value === 'string' && value !== '') {
-      return value.length > 90 ? `${value.slice(0, 90)}…` : value
+      const isPath = field === 'file_path' || field === 'path'
+      const shown = isPath ? shortenPath(value, cwd, home) : value
+      // Commands are frequently multi-line; the row is single-line by contract.
+      const oneLine = shown.replace(/\s*\n\s*/g, ' ⏎ ').trim()
+      return oneLine.length > 90 ? `${oneLine.slice(0, 90)}…` : oneLine
     }
   }
   return ''
+}
+
+/**
+ * Strip the envelope several tools wrap their result in.
+ *
+ * `read`/`write` return `<path>…</path> <type>file</type> <content> … </content>`
+ * style text. Rendering the tags and line numbers verbatim is noise on a phone:
+ * the path is already the card's summary, and the type is implied by the tool.
+ * Only a leading envelope is removed, and only when it is well-formed, so an
+ * arbitrary result that merely contains a `<content>` tag is left alone.
+ * @param text - the flattened result text.
+ * @returns the text with a leading envelope removed.
+ */
+function stripEnvelope(text: string): string {
+  const match = /^\s*<path>[^]*?<\/path>\s*<type>[^]*?<\/type>\s*<content>\s*([^]*?)\s*<\/content>\s*$/.exec(text)
+  if (match !== null && typeof match[1] === 'string') return match[1]
+  return text
 }
 
 /**
@@ -264,7 +338,7 @@ function contentText(content: readonly unknown[] | undefined): string {
       if (typeof value === 'string' && value !== '') { parts.push(value); break }
     }
   }
-  return parts.join('\n')
+  return stripEnvelope(parts.join('\n'))
 }
 
 /** Cap on rendered output, so a huge result cannot lock up the phone. */
@@ -289,7 +363,7 @@ export function ToolCard(props: ToolCardProps) {
   const subCalls = isSettled(props.block) ? props.block.subCalls : (props.block as RunningBlock).subCalls
   const subCount = Array.isArray(subCalls) ? subCalls.length : 0
 
-  const detail = summarize(blockArgs(props.block))
+  const detail = summarize(blockArgs(props.block), props.cwd, props.home)
   const verb = settled ? (failed ? t.toolFailed : t.toolRan) : t.toolRunning
 
   return (

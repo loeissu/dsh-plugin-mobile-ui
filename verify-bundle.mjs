@@ -186,14 +186,23 @@ if (missing.length > 0) {
 }
 
 for (const { options, component } of registered) {
-  const { name, id, key, order } = options
+  const { name, id, key, order, priority } = options
   console.log(
-    `registered -> name=${name} id=${id ?? '-'} key=${key ?? '-'} order=${order ?? '-'}`
-    + ` component=${typeof component}`,
+    `registered -> name=${name} id=${id ?? '-'} key=${key ?? '-'}`
+    + ` order=${order ?? '-'} priority=${priority ?? '-'}`,
   )
   if (name === undefined) throw new Error('a registration is missing its slot name')
   if (typeof component !== 'function') {
     throw new Error(`component for ${name} is not a function`)
+  }
+  // A keyed cell admits one entry per priority: registering a shipped key at
+  // the same priority throws at runtime instead of shadowing it. This was
+  // observed on a live instance, so the contract check enforces it too.
+  if (key !== undefined && !(typeof priority === 'number' && priority < 0)) {
+    throw new Error(
+      `keyed registration for "${key}" must declare a negative priority: a keyed `
+      + 'cell rejects a second entry at the same priority rather than shadowing it',
+    )
   }
 }
 
