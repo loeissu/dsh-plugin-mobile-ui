@@ -71,6 +71,16 @@ const STYLE_ID = 'drawer'
  */
 const NARROW = '(max-width: 768px)'
 
+/**
+ * Shortest overhang worth animating.
+ *
+ * Deliberately small. An earlier value of 12 silently skipped the very title this
+ * was built for: it overflowed by exactly 12px, i.e. its last character was cut,
+ * and the threshold rejected it. Only sub-pixel noise should be ignored, since the
+ * ellipsis already replaces one character and any real overhang hides more.
+ */
+const MARQUEE_MIN_PX = 4
+
 const CSS = `
 /* ── native sidebar suppression (narrow screens only) ──────────────────────
    Hiding the sidebar column alone is NOT enough. Removing a grid item from
@@ -344,15 +354,55 @@ const CSS = `
     border-radius: 0 3px 3px 0;
     background: ${V.accent};
   }
+  /* Session titles.
+   *
+   * display: block on the title is required, not stylistic. It was a bare span
+   * inside the row button, so it stayed inline — and overflow plus
+   * text-overflow: ellipsis DO NOT APPLY to an inline box. The result was a
+   * title cut dead at the panel edge with no ellipsis, and 39px of horizontal
+   * overflow in the list. Measured: display=inline, clientWidth=0, scrollWidth=0
+   * while the box itself rendered 257px wide.
+   *
+   * The workspace rows never had the bug because their parent is display: flex,
+   * and a flex item is blockified. */
   .dsh-mobile-sess-title {
+    display: block;
     font-size: 14px;
     line-height: 1.4;
     overflow: hidden;
-    text-overflow: ellipsis;
     white-space: nowrap;
     color: ${V.textDim};
   }
+  /* Ellipsis lives on the inner span, so the same element can switch to a
+     translating marquee without the two mechanisms fighting. */
+  .dsh-mobile-sess-title > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .dsh-mobile-sess[data-active='true'] .dsh-mobile-sess-title { color: ${V.text}; font-weight: 500; }
+
+  /* Marquee for the current session only.
+   *
+   * Read-only titles are the common case and there is exactly one current
+   * session, so animating only that one keeps a screenful of rows still. The
+   * distance and duration are measured and set per title, so speed stays even
+   * for titles of different lengths, and alternate returns the text instead of
+   * snapping back. */
+  .dsh-mobile-sess-title[data-scroll='true'] > span {
+    display: inline-block;
+    overflow: visible;
+    text-overflow: clip;
+    animation: dsh-mobile-marquee var(--dsh-mobile-marquee-duration, 8s) ease-in-out infinite alternate;
+  }
+  @keyframes dsh-mobile-marquee {
+    0%, 12%   { transform: translateX(0); }
+    88%, 100% { transform: translateX(calc(-1 * var(--dsh-mobile-marquee-distance, 0px))); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dsh-mobile-sess-title[data-scroll='true'] > span { animation: none; }
+  }
   .dsh-mobile-sess-meta {
     display: flex;
     align-items: center;
@@ -488,6 +538,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   // from a list that ends there, so the panel shows a fade while more content
   // remains. Measured rather than assumed: content that fits shows nothing.
   const bodyRef = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
   const [moreBelow, setMoreBelow] = useState(false)
 
   const measureOverflow = useCallback((): void => {
@@ -579,6 +630,36 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     }
   }, [open, measureOverflow, grouped, buckets])
 
+  // Marquee for the current session's title, measured rather than assumed.
+  //
+  // Only the active row animates: there is exactly one current session, so this
+  // keeps a screenful of read-only rows perfectly still. It also runs only when
+  // the text genuinely overflows — otherwise the ellipsis already signals "there
+  // is more", and a moving row would be noise.
+  //
+  // Distance and duration are derived from the measurement, so a long title and a
+  // short one scroll at the same speed instead of the short one crawling.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (panel === null) return
+    // Whatever was marked last render is stale; the active row may have changed.
+    for (const stale of panel.querySelectorAll('.dsh-mobile-sess-title[data-scroll]')) {
+      stale.removeAttribute('data-scroll')
+    }
+    if (!open) return
+    const title = panel.querySelector('.dsh-mobile-sess[data-active="true"] .dsh-mobile-sess-title')
+    const inner = title === null ? null : title.firstElementChild
+    if (title === null || inner === null) return
+    // The inner span carries `overflow: hidden`, so its scrollWidth still reports
+    // the full text width while clientWidth reports the box.
+    const distance = inner.scrollWidth - title.clientWidth
+    if (distance <= MARQUEE_MIN_PX) return
+    title.setAttribute('data-scroll', 'true')
+    title.style.setProperty('--dsh-mobile-marquee-distance', `${distance}px`)
+    // Roughly 22px per second, clamped so a very long title stays endurable.
+    title.style.setProperty('--dsh-mobile-marquee-duration', `${Math.min(20, Math.max(6, distance / 22)).toFixed(1)}s`)
+  }, [open, current, grouped])
+
   const loading = wsPhase === 'pending' || sessPhase === 'pending'
 
   const overlay = (
@@ -604,6 +685,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
 
       <div
         className="dsh-mobile-drawer-panel"
+        ref={panelRef}
         data-dsh-mobile-ui="drawer-panel"
         /* Deliberately NOT role="dialog" + aria-modal="true": dsh-tether's
            injected narrow-screen sheet forces that exact pair to
@@ -680,7 +762,9 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                     data-dsh-mobile-ui="drawer-session"
                     onClick={() => { props.openSession(s.id); setOpen(false) }}
                   >
-                    <span className="dsh-mobile-sess-title">{s.displayTitle}</span>
+                    <span className="dsh-mobile-sess-title" title={s.displayTitle}>
+                      <span>{s.displayTitle}</span>
+                    </span>
                     <span className="dsh-mobile-sess-meta">
                       {s.running || s.completed === true
                         ? <span className="dsh-mobile-sess-state" data-state={s.running ? 'running' : 'done'} aria-hidden="true" />
