@@ -36,6 +36,7 @@ import { DrawerOverlay } from './DrawerOverlay.tsx'
 import { SECTION_OPTIONS, SettingsSection } from './Settings.tsx'
 import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
+import { installTetherCompat } from './tether-compat.ts'
 import { installKeyboardFit } from './viewport.ts'
 
 /**
@@ -89,6 +90,10 @@ export function apply(ctx: ClientContext): void {
   if (FEATURES.keyboardFit) {
     ctx.effect(() => installKeyboardFit(), 'mobile-ui: keyboard fit')
   }
+
+  // Counter-rules for tether's injected sheet. A stylesheet with no listeners,
+  // so there is nothing to dispose.
+  if (FEATURES.tetherCompat) installTetherCompat()
 
   if (FEATURES.splash) {
     ctx.slots.inject('shell.overlay', () =>

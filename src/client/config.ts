@@ -209,6 +209,18 @@ export const FEATURES = {
    */
   keyboardFit: true,
   /**
+   * Counter-rules for dsh-tether's over-broad injected selectors.
+   *
+   * tether's narrow-screen sheet forces `flex-wrap: wrap` on every element whose
+   * class contains `_row` — 26 elements in the shipped UI — which squashes the
+   * queued-message row in the composer into a clipped sliver. This restores that
+   * one row's layout.
+   *
+   * Touches no slot: a stylesheet only, and inert when tether is not installed.
+   * Delete once tether narrows its selector — see `src/client/tether-compat.ts`.
+   */
+  tetherCompat: true,
+  /**
    * Tool names whose shipped card this plugin replaces in
    * `tool.call.toolview`. A key the shipped composition already covers is
    * replaced, not shared — so every name listed here LOSES DSH's own card.
