@@ -54,7 +54,7 @@
  * system Back gesture and the WebView never receives it. That is platform
  * interception, not something a page can claim.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from './config.ts'
 import { injectStyles, TOKEN, V } from './theme.ts'
@@ -102,7 +102,17 @@ const CSS = `
 @media ${NARROW} {
   .dsh-mobile-drawer-root {
     position: fixed;
-    inset: 0;
+    /* Sized to the VISIBLE band, not the layout viewport.
+       \`inset: 0\` resolves against the layout viewport, which this shell does not
+       shrink for the keyboard. With the keyboard open and the frame shrunk to
+       the visual viewport, an inset-based root would stay at full height and the
+       panel's lower rows would sit behind the keyboard, unreachable.
+       The variables are set by the keyboard-fit script and fall back to the
+       untouched full-viewport layout when it is inactive. */
+    top: var(--dsh-mobile-vv-top, 0px);
+    left: 0;
+    right: 0;
+    height: var(--dsh-mobile-vv-height, 100%);
     z-index: 2147482000;
     pointer-events: none;
     font-size: 14px;
@@ -206,10 +216,21 @@ const CSS = `
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    /* Momentum scrolling and contained overscroll: without the latter, scrolling
+       to the end of the list chains to the conversation behind the drawer. */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     padding: 0 0 20px;
   }
 
+  /* Section labels pin to the top while their rows scroll under them, so the
+     reader always knows which group the visible rows belong to. Opaque
+     background is required: a sticky label scrolls OVER the rows. */
   .dsh-mobile-drawer-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: ${V.surface};
     font-size: 11px;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -222,6 +243,18 @@ const CSS = `
     height: 0.5px;
     background: ${V.border};
     margin: 10px 16px;
+  }
+
+  /* Bottom fade marking that the list continues. Sits above the scroll body,
+     inside the panel so it inherits the rounded corner. */
+  .dsh-mobile-drawer-more {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 34px;
+    pointer-events: none;
+    background: linear-gradient(to bottom, transparent, ${V.surface});
   }
 
   /* Workspace rows: the whole row is the target. */
@@ -443,6 +476,18 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   injectStyles(STYLE_ID, CSS)
   const [open, setOpen] = useState(false)
 
+  // Scroll affordance. A list that continues below the fold is indistinguishable
+  // from a list that ends there, so the panel shows a fade while more content
+  // remains. Measured rather than assumed: content that fits shows nothing.
+  const bodyRef = useRef<HTMLDivElement | null>(null)
+  const [moreBelow, setMoreBelow] = useState(false)
+
+  const measureOverflow = useCallback((): void => {
+    const el = bodyRef.current
+    if (el === null) return
+    setMoreBelow(el.scrollHeight - el.clientHeight - el.scrollTop > 8)
+  }, [])
+
   // Selectors return stable references only; anything derived is computed with
   // useMemo below. Returning a freshly built array from a selector would give a
   // new identity every render and loop.
@@ -505,6 +550,27 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     return () => { window.removeEventListener('keydown', onKey) }
   }, [open])
 
+  // Re-measure whenever the drawer opens, the content changes, or the box
+  // resizes (a keyboard shrinking the panel changes what fits).
+  useEffect(() => {
+    if (!open) {
+      setMoreBelow(false)
+      return
+    }
+    measureOverflow()
+    const el = bodyRef.current
+    if (el === null) return
+    el.addEventListener('scroll', measureOverflow, { passive: true })
+    // Guarded: an engine without ResizeObserver keeps the open-time measurement
+    // and the scroll listener, so the fade still tracks scrolling.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(measureOverflow)
+    observer?.observe(el)
+    return () => {
+      el.removeEventListener('scroll', measureOverflow)
+      observer?.disconnect()
+    }
+  }, [open, measureOverflow, grouped, buckets])
+
   const loading = wsPhase === 'pending' || sessPhase === 'pending'
 
   const overlay = (
@@ -559,7 +625,13 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
           </button>
         </div>
 
-        <div className="dsh-mobile-drawer-body">
+        {/* Scroll affordance: shown only while rows remain below the fold, so a
+            list that fits stays clean. Purely decorative and inert to touch. */}
+        {moreBelow
+          ? <div className="dsh-mobile-drawer-more" data-dsh-mobile-ui="drawer-more" aria-hidden="true" />
+          : null}
+
+        <div className="dsh-mobile-drawer-body" ref={bodyRef}>
           {/* Workspaces on the connected machine. Not machines: switching
               machines belongs to dsh-tether and is not readable here. */}
           <div className="dsh-mobile-drawer-label">{t.drawerWorkspaces}</div>
