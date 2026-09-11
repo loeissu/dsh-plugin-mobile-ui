@@ -89,17 +89,69 @@ const require = (specifier) => {
   return table[specifier]
 }
 
-/** Minimal DOM so module-scope language detection and style injection work. */
+/**
+ * Minimal DOM so module-scope language detection, style injection and the
+ * diagnostic badge work.
+ *
+ * `createElement` returns a functional element rather than a bare object. A
+ * plugin that mounts anything into the page touches `setAttribute`,
+ * `addEventListener` and `append`, and a stub missing those turns a real
+ * environment concern into a confusing TypeError inside the plugin.
+ */
+const makeElementStub = (tag = 'div') => {
+  const el = {
+    tagName: String(tag).toUpperCase(),
+    id: '',
+    className: '',
+    textContent: '',
+    children: [],
+    attributes: {},
+    dataset: {},
+    style: {
+      setProperty() {},
+      removeProperty() {},
+      getPropertyValue: () => '',
+    },
+    setAttribute(name, value) { el.attributes[name] = String(value) },
+    getAttribute: (name) => (name in el.attributes ? el.attributes[name] : null),
+    hasAttribute: (name) => name in el.attributes,
+    removeAttribute(name) { delete el.attributes[name] },
+    addEventListener() {},
+    removeEventListener() {},
+    append() {},
+    appendChild() {},
+    prepend() {},
+    remove() {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    closest: () => null,
+    contains: () => false,
+  }
+  return el
+}
+
 const documentStub = {
-  documentElement: { getAttribute: () => 'en' },
-  body: { hasAttribute: () => false },
-  head: { append: () => {} },
-  createElement: () => ({ dataset: {}, style: {} }),
+  documentElement: { getAttribute: () => 'en', style: makeElementStub().style },
+  body: makeElementStub('body'),
+  head: makeElementStub('head'),
+  createElement: (tag) => makeElementStub(tag),
   querySelector: () => null,
+  querySelectorAll: () => [],
   getElementById: () => null,
 }
 
-globalThis.window = { __ModuleLoader__: { load: (record) => { loads.push(record) } } }
+Object.assign(globalThis, {
+  // The badge attaches event listeners and starts an interval. Both are stubbed
+  // so the harness never schedules real timers (which would hold the process
+  // open) while still exercising the install path.
+  window: {
+    __ModuleLoader__: { load: (record) => { loads.push(record) } },
+    addEventListener() {},
+    removeEventListener() {},
+    setInterval: () => 0,
+    clearInterval() {},
+  },
+})
 globalThis.document = documentStub
 // Node 24 exposes `navigator` as a getter-only global, so it must be redefined
 // rather than assigned. The bundle reads `navigator.language` for copy choice.

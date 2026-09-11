@@ -221,6 +221,21 @@ export const FEATURES = {
    */
   tetherCompat: true,
   /**
+   * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
+   * can work at all: the live viewport heights, the smallest visual-viewport
+   * height seen since load, and event counters.
+   *
+   * The reason it is needed: `keyboardFit` assumes Android WebView reports the
+   * keyboard through `visualViewport`, and that assumption can only be tested on a
+   * device. Mocking `visualViewport` on a desktop proves the logic is
+   * self-consistent, not that the assumption holds — so the desktop suite was
+   * green while the phone stayed broken.
+   *
+   * Turn this off once the device behaviour is known. See
+   * `src/client/keyboard-debug.ts`.
+   */
+  keyboardDebug: true,
+  /**
    * Tool names whose shipped card this plugin replaces in
    * `tool.call.toolview`. A key the shipped composition already covers is
    * replaced, not shared — so every name listed here LOSES DSH's own card.
