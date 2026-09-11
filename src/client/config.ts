@@ -58,6 +58,19 @@ export interface Copy {
   readonly drawerTitle: string
   readonly drawerClose: string
   readonly drawerPlaceholder: string
+  readonly drawerWorkspaces: string
+  readonly drawerSessions: string
+  readonly drawerLoading: string
+  readonly drawerNoWorkspaces: string
+  readonly drawerNoSessions: string
+  readonly bucketJustNow: string
+  readonly bucketToday: string
+  readonly bucketYesterday: string
+  readonly bucketEarlier: string
+  readonly ageJustNow: string
+  readonly ageMinutes: string
+  readonly ageHours: string
+  readonly ageDays: string
 }
 
 const ZH: Copy = {
@@ -94,6 +107,19 @@ const ZH: Copy = {
   drawerTitle: '导航',
   drawerClose: '关闭',
   drawerPlaceholder: '工作区与会话列表将在这里显示。',
+  drawerWorkspaces: '工作区',
+  drawerSessions: '会话',
+  drawerLoading: '正在载入…',
+  drawerNoWorkspaces: '这台电脑上还没有工作区。',
+  drawerNoSessions: '这个工作区里还没有会话。',
+  bucketJustNow: '刚刚',
+  bucketToday: '今天',
+  bucketYesterday: '昨天',
+  bucketEarlier: '更早',
+  ageJustNow: '刚刚',
+  ageMinutes: ' 分钟',
+  ageHours: ' 小时',
+  ageDays: ' 天',
 }
 
 const EN: Copy = {
@@ -130,6 +156,19 @@ const EN: Copy = {
   drawerTitle: 'Navigation',
   drawerClose: 'Close',
   drawerPlaceholder: 'Workspaces and sessions will appear here.',
+  drawerWorkspaces: 'Workspaces',
+  drawerSessions: 'Sessions',
+  drawerLoading: 'Loading…',
+  drawerNoWorkspaces: 'No workspaces on this machine yet.',
+  drawerNoSessions: 'No sessions in this workspace yet.',
+  bucketJustNow: 'Just now',
+  bucketToday: 'Today',
+  bucketYesterday: 'Yesterday',
+  bucketEarlier: 'Earlier',
+  ageJustNow: 'just now',
+  ageMinutes: 'm',
+  ageHours: 'h',
+  ageDays: 'd',
 }
 
 /** Detect the copy language from the document, then the browser. */

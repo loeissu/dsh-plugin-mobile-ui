@@ -12,41 +12,49 @@
  *     ui-sidebar owns, and ui-sidebar declares the same six while mounted.
  *
  * Both failures are global — the application renders "Failed to load plugins"
- * and nothing works — and (2) cannot be fixed by priority at all; it requires
- * disabling the shipped entry in the user's profile. See
+ * and nothing works — and (2) cannot be fixed by priority at all. See
  * `docs/drawer-takeover.md`.
  *
- * So the shipped sidebar stays mounted and is hidden with CSS (narrow screens
- * only), and this overlay supplies the replacement UI. The two are independent:
- * dropping the CSS restores the native 56px rail with no drawer and no
- * breakage.
+ * So the shipped sidebar stays mounted and is hidden with CSS on narrow screens
+ * only, and this overlay supplies the replacement UI. The two are independent:
+ * dropping the CSS restores the native 56px rail with no drawer and no breakage.
  *
- * ## The two pointer-events decisions
+ * ## Data
  *
- * `shell.overlay` is a click-through layer, so every surface here has to opt
- * back in explicitly, and the two surfaces need opposite treatment:
+ * `useSessions` and `useWorkspaces` both arrive as global standard props (they
+ * are declared on `GlobalStandardProps`, which applies in every scope including
+ * this slot's `root`). Verified against a live renderer rather than inferred —
+ * see `docs/drawer-list-fields.md`.
  *
- *  - The scrim and panel set `pointer-events: auto` while open, so a tap lands
- *    on them instead of the application underneath.
- *  - The floating trigger sets `pointer-events: auto` permanently, because it
- *    is the only way in once the native rail is hidden.
- *  - The scrim and panel return to `pointer-events: none` while closed, so a
- *    closed drawer cannot swallow taps. This is the same trap the splash has:
- *    an overlay left mounted at `opacity: 0` still eats input.
+ * Grouping is a direct association: `WorkspaceView.sessionIds` lists the
+ * sessions accounted to a workspace, so there is no need to match a session's
+ * `cwd` against a workspace `path`.
+ *
+ * ## What the top section is, and is not
+ *
+ * It lists **workspaces on the connected machine**, not the machines
+ * themselves. Switching machines is dsh-tether's concern — a different plugin's
+ * state, which a plugin cannot read — so it is out of reach here.
+ *
+ * ## Pointer events
+ *
+ * `shell.overlay` is click-through, so every surface opts back in explicitly,
+ * and the surfaces need opposite treatment:
+ *
+ *  - The scrim and panel set `pointer-events: auto` only while open.
+ *  - The floating trigger sets it permanently, because it is the only way in
+ *    once the native rail is hidden.
+ *
+ * A closed overlay left at `pointer-events: auto` swallows every tap on the
+ * page and looks exactly like a frozen app — the same trap the splash has.
  *
  * ## Why a floating trigger and not an edge swipe
  *
  * Android 10+ gesture navigation reserves the left-edge right-swipe for the
- * system Back gesture, and the WebView never receives it. That is a platform
- * interception, not something the page can claim. A button is the only
- * dependable affordance.
- *
- * ## Scope of this file
- *
- * Minimal skeleton: panel, scrim, close button, trigger. No workspace or
- * session list yet.
+ * system Back gesture and the WebView never receives it. That is platform
+ * interception, not something a page can claim.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from './config.ts'
 import { injectStyles, TOKEN, V } from './theme.ts'
@@ -91,16 +99,16 @@ const CSS = `
   }
 }
 
-/* ── overlay layer: click-through by default, children opt back in ────────── */
 @media ${NARROW} {
   .dsh-mobile-drawer-root {
     position: fixed;
     inset: 0;
     z-index: 2147482000;
     pointer-events: none;
+    font-size: 14px;
+    color: ${V.text};
   }
 
-  /* The floating trigger sits above everything and owns its own hit area. */
   .dsh-mobile-drawer-trigger {
     position: absolute;
     top: calc(env(safe-area-inset-top, 0px) + 8px);
@@ -121,8 +129,6 @@ const CSS = `
   }
   .dsh-mobile-drawer-trigger:active { background: ${V.active}; }
 
-  /* Scrim only exists while open, and returns to click-through when closed so
-     a dismissed drawer cannot intercept taps. */
   .dsh-mobile-drawer-scrim {
     position: absolute;
     inset: 0;
@@ -141,8 +147,11 @@ const CSS = `
     top: 0;
     bottom: 0;
     left: 0;
-    width: 80%;
-    max-width: 320px;
+    /* Narrower than the prototype's 80%: on a phone a full-height panel at 80%
+       leaves a strip too small to aim at, and the drawer is dismissed by
+       tapping the scrim. min() keeps the strip on small viewports while
+       capping the panel on wide ones. */
+    width: min(72%, 300px);
     display: flex;
     flex-direction: column;
     background: ${V.surface};
@@ -167,7 +176,6 @@ const CSS = `
     gap: 10px;
     min-height: 52px;
     padding: 0 14px;
-    border-bottom: 0.5px solid ${V.border};
   }
   .dsh-mobile-drawer-title {
     flex: 1;
@@ -198,8 +206,134 @@ const CSS = `
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 14px;
-    font-size: 13px;
+    padding: 0 0 20px;
+  }
+
+  .dsh-mobile-drawer-label {
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: ${V.textFaint};
+    padding: 14px 16px 6px;
+  }
+
+  .dsh-mobile-drawer-sep {
+    height: 0.5px;
+    background: ${V.border};
+    margin: 10px 16px;
+  }
+
+  /* Workspace rows: the whole row is the target. */
+  .dsh-mobile-ws {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 8px 16px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .dsh-mobile-ws:active { background: ${V.active}; }
+  .dsh-mobile-ws[data-active='true'] { background: ${V.hover}; }
+  .dsh-mobile-ws-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    corner-shape: round;
+    background: transparent;
+    border: 1.5px solid ${V.textFaint};
+  }
+  .dsh-mobile-ws[data-active='true'] .dsh-mobile-ws-dot {
+    background: ${V.accent};
+    border-color: ${V.accent};
+  }
+  .dsh-mobile-ws-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .dsh-mobile-ws-name {
+    font-size: 14px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dsh-mobile-ws-path {
+    font-size: 11px;
+    color: ${V.textFaint};
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dsh-mobile-ws-count {
+    flex: none;
+    font-size: 11px;
+    color: ${V.textFaint};
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Session rows: active gets an accent rail, matching the native sidebar's
+     selected treatment. */
+  .dsh-mobile-sess {
+    position: relative;
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 9px 16px 9px 20px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .dsh-mobile-sess:active { background: ${V.active}; }
+  .dsh-mobile-sess[data-active='true'] { background: ${V.hover}; }
+  .dsh-mobile-sess[data-active='true']::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 18px;
+    border-radius: 0 3px 3px 0;
+    background: ${V.accent};
+  }
+  .dsh-mobile-sess-title {
+    font-size: 14px;
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: ${V.textDim};
+  }
+  .dsh-mobile-sess[data-active='true'] .dsh-mobile-sess-title { color: ${V.text}; font-weight: 500; }
+  .dsh-mobile-sess-meta {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: ${V.textFaint};
+    margin-top: 3px;
+  }
+  .dsh-mobile-sess-state {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    corner-shape: round;
+  }
+  .dsh-mobile-sess-state[data-state='running'] { background: ${V.accent}; }
+  .dsh-mobile-sess-state[data-state='done'] { background: #34d399; }
+
+  .dsh-mobile-drawer-empty {
+    padding: 18px 16px;
+    font-size: 12.5px;
+    line-height: 1.7;
     color: ${V.textFaint};
   }
 
@@ -210,22 +344,168 @@ const CSS = `
 }
 `
 
+/* ── data shapes ─────────────────────────────────────────────────────────────
+   Structural copies of the published types, narrowed to the fields this list
+   reads. Declared locally so the plugin does not take a build dependency on
+   three more DSH packages, which would couple it to a DSH minor version. Field
+   provenance: docs/drawer-list-fields.md. */
+
+/** One session row, from `useSessions` → `byId`. */
+interface SessionSummary {
+  readonly id: string
+  /** Durable title; absent until the host projects one. Do not render this. */
+  readonly title?: string
+  /** Always present: durable title, else project basename, else session id. */
+  readonly displayTitle: string
+  readonly cwd?: string
+  readonly origin?: 'subagent'
+  readonly running: boolean
+  readonly completed?: boolean
+  /** Empty-log placeholder; filtered out of the list. */
+  readonly blank: boolean
+  readonly updatedAt: number
+}
+
+/** One workspace row, from `useWorkspaces` → `items`. */
+interface WorkspaceView {
+  readonly workspaceId: string
+  readonly path: string
+  readonly title: string
+  /** Sessions accounted to this workspace, in manual order. */
+  readonly sessionIds: readonly string[]
+}
+
+/** Props injected by the plugin's `apply`, plus the framework standard props. */
+export interface DrawerOverlayProps {
+  /** Session list and current selection. */
+  readonly useSessions: <S>(selector: (state: {
+    readonly ids: readonly string[]
+    readonly byId: Readonly<Record<string, SessionSummary>>
+    readonly current: string | undefined
+    readonly phase: 'pending' | 'ready'
+  }) => S) => S
+  /** Workspace list and archive set. */
+  readonly useWorkspaces: <S>(selector: (state: {
+    readonly items: readonly WorkspaceView[]
+    readonly archivedSessionIds: readonly string[]
+    readonly state: 'idle' | 'loading' | 'error'
+    readonly phase: 'pending' | 'ready'
+  }) => S) => S
+  /** Select a session and show its conversation. */
+  readonly openSession: (sessionId: string) => void
+  /** Connect a workspace and open its session. */
+  readonly openWorkspace: (workspaceId: string) => void
+}
+
+/** A time bucket for the secondary grouping. */
+type Bucket = 'justNow' | 'today' | 'yesterday' | 'earlier'
+
+/** Bucket boundaries in milliseconds. */
+const MINUTE = 60_000
+const HOUR = 60 * MINUTE
+const DAY = 24 * HOUR
+
 /**
- * The drawer overlay: a floating trigger, a scrim, and a panel.
+ * Classify a session's last activity.
+ *
+ * Uses calendar-day boundaries rather than fixed 24h windows, so "yesterday"
+ * means the previous calendar day — which is what a reader expects from the
+ * label.
+ * @param updatedAt - epoch milliseconds.
+ * @param now - current epoch milliseconds.
+ * @returns the bucket.
+ */
+function bucketFor(updatedAt: number, now: number): Bucket {
+  const age = now - updatedAt
+  if (age < HOUR) return 'justNow'
+  const startOfToday = new Date(now).setHours(0, 0, 0, 0)
+  if (updatedAt >= startOfToday) return 'today'
+  if (updatedAt >= startOfToday - DAY) return 'yesterday'
+  return 'earlier'
+}
+
+/** Relative age label for a session row. */
+function ageLabel(updatedAt: number, now: number): string {
+  const age = now - updatedAt
+  if (age < MINUTE) return t.ageJustNow
+  if (age < HOUR) return `${Math.floor(age / MINUTE)}${t.ageMinutes}`
+  if (age < DAY) return `${Math.floor(age / HOUR)}${t.ageHours}`
+  return `${Math.floor(age / DAY)}${t.ageDays}`
+}
+
+/**
+ * The drawer overlay: a floating trigger, a scrim, and a panel holding the
+ * workspace selector and the selected workspace's sessions.
+ * @param props - framework standard props plus the injected navigation calls.
  * @returns the overlay, rendered on `document.body`.
  */
-export function DrawerOverlay() {
+export function DrawerOverlay(props: DrawerOverlayProps) {
   injectStyles(STYLE_ID, CSS)
   const [open, setOpen] = useState(false)
 
-  // Escape closes. Not the primary affordance (a phone has no keyboard) but it
-  // costs nothing and helps when the same build is driven from a desktop.
+  // Selectors return stable references only; anything derived is computed with
+  // useMemo below. Returning a freshly built array from a selector would give a
+  // new identity every render and loop.
+  const items = props.useWorkspaces((s) => s.items)
+  const archived = props.useWorkspaces((s) => s.archivedSessionIds)
+  const wsPhase = props.useWorkspaces((s) => s.phase)
+  const byId = props.useSessions((s) => s.byId)
+  const current = props.useSessions((s) => s.current)
+  const sessPhase = props.useSessions((s) => s.phase)
+
+  // Now is read once per open rather than on a timer: the labels are coarse
+  // ("3分钟", "今天") and a phone drawer is inspected briefly.
+  const now = useMemo(() => Date.now(), [open, items, byId])
+
+  const grouped = useMemo(() => {
+    const archivedSet = new Set(archived)
+    return items.map((ws) => {
+      const sessions = ws.sessionIds
+        .map((id) => byId[id])
+        .filter((s): s is SessionSummary => s !== undefined)
+        // Subagent sessions belong to their parent's detail view, blank ones
+        // are reuse placeholders, and archived ones were explicitly put away.
+        .filter((s) => s.origin !== 'subagent' && !s.blank && !archivedSet.has(s.id))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+      return { ws, sessions }
+    })
+  }, [items, byId, archived])
+
+  // The active workspace is the one accounting for the current session; there
+  // is no explicit "selected workspace" in the snapshot. Falling back to the
+  // first keeps the panel useful when nothing is selected yet.
+  const activeId = useMemo(() => {
+    if (current !== undefined) {
+      const owner = grouped.find((g) => g.sessions.some((s) => s.id === current))
+      if (owner !== undefined) return owner.ws.workspaceId
+    }
+    return grouped[0]?.ws.workspaceId
+  }, [grouped, current])
+
+  const active = grouped.find((g) => g.ws.workspaceId === activeId)
+
+  const buckets = useMemo(() => {
+    const order: Bucket[] = ['justNow', 'today', 'yesterday', 'earlier']
+    const label: Record<Bucket, string> = {
+      justNow: t.bucketJustNow,
+      today: t.bucketToday,
+      yesterday: t.bucketYesterday,
+      earlier: t.bucketEarlier,
+    }
+    const sessions = active?.sessions ?? []
+    return order
+      .map((b) => ({ bucket: b, label: label[b], items: sessions.filter((s) => bucketFor(s.updatedAt, now) === b) }))
+      .filter((g) => g.items.length > 0)
+  }, [active, now])
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent): void => { if (e.key === 'Escape') setOpen(false) }
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
   }, [open])
+
+  const loading = wsPhase === 'pending' || sessPhase === 'pending'
 
   const overlay = (
     <div className="dsh-mobile-drawer-root" data-open={open ? 'true' : 'false'} data-dsh-mobile-ui="drawer-overlay">
@@ -251,8 +531,17 @@ export function DrawerOverlay() {
       <div
         className="dsh-mobile-drawer-panel"
         data-dsh-mobile-ui="drawer-panel"
-        role="dialog"
-        aria-modal="true"
+        /* Deliberately NOT role="dialog" + aria-modal="true": dsh-tether's
+           injected narrow-screen sheet forces that exact pair to
+           `width: 100% !important; max-width: 100% !important;
+           border-radius: 0 !important`, which left no scrim to tap and is how
+           this shipped broken to a phone — 321px in an isolated profile, 413px
+           of 412 on a device where tether is also installed. The rule is
+           `!important`, so not matching its selector is the fix; verified by
+           tools/verify-coexistence.mjs. `navigation` is also the more honest
+           role: this is a navigation region and the panel traps no focus, so
+           claiming modality would overstate it. */
+        role="navigation"
         aria-label={t.drawerTitle}
       >
         <div className="dsh-mobile-drawer-head">
@@ -271,7 +560,57 @@ export function DrawerOverlay() {
         </div>
 
         <div className="dsh-mobile-drawer-body">
-          {t.drawerPlaceholder}
+          {/* Workspaces on the connected machine. Not machines: switching
+              machines belongs to dsh-tether and is not readable here. */}
+          <div className="dsh-mobile-drawer-label">{t.drawerWorkspaces}</div>
+          {grouped.length === 0
+            ? <div className="dsh-mobile-drawer-empty">{loading ? t.drawerLoading : t.drawerNoWorkspaces}</div>
+            : grouped.map(({ ws, sessions }) => (
+              <button
+                key={ws.workspaceId}
+                type="button"
+                className="dsh-mobile-ws"
+                data-active={ws.workspaceId === activeId ? 'true' : 'false'}
+                data-dsh-mobile-ui="drawer-workspace"
+                onClick={() => { props.openWorkspace(ws.workspaceId); setOpen(false) }}
+              >
+                <span className="dsh-mobile-ws-dot" aria-hidden="true" />
+                <span className="dsh-mobile-ws-text">
+                  <span className="dsh-mobile-ws-name">{ws.title}</span>
+                  <span className="dsh-mobile-ws-path">{ws.path}</span>
+                </span>
+                <span className="dsh-mobile-ws-count">{sessions.length}</span>
+              </button>
+            ))}
+
+          <div className="dsh-mobile-drawer-sep" />
+          <div className="dsh-mobile-drawer-label">{t.drawerSessions}</div>
+
+          {buckets.length === 0
+            ? <div className="dsh-mobile-drawer-empty">{loading ? t.drawerLoading : t.drawerNoSessions}</div>
+            : buckets.map((group) => (
+              <div key={group.bucket}>
+                <div className="dsh-mobile-drawer-label">{group.label}</div>
+                {group.items.map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    className="dsh-mobile-sess"
+                    data-active={s.id === current ? 'true' : 'false'}
+                    data-dsh-mobile-ui="drawer-session"
+                    onClick={() => { props.openSession(s.id); setOpen(false) }}
+                  >
+                    <span className="dsh-mobile-sess-title">{s.displayTitle}</span>
+                    <span className="dsh-mobile-sess-meta">
+                      {s.running || s.completed === true
+                        ? <span className="dsh-mobile-sess-state" data-state={s.running ? 'running' : 'done'} aria-hidden="true" />
+                        : null}
+                      <span>{ageLabel(s.updatedAt, now)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ))}
         </div>
       </div>
     </div>

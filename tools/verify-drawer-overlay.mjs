@@ -168,8 +168,11 @@ check(open.open === 'true', 'trigger opened the drawer')
 check(open.panelPointerEvents === 'auto', 'OPEN panel accepts taps')
 check(open.scrimPointerEvents === 'auto', 'OPEN scrim accepts taps (dismissable)')
 check(open.panelWidth > 0, 'panel has a width', `${open.panelWidth}px`)
-const expected = Math.min(320, Math.round(412 * 0.8))
-check(Math.abs(open.panelWidth - expected) <= 2, 'panel is 80% of the viewport', `${open.panelWidth}px (expected ~${expected}px)`)
+// The panel is `min(72%, 300px)`. Narrower than the prototype's 80% on purpose:
+// the drawer is dismissed by tapping the scrim, so a full-height panel at 80%
+// leaves a strip too small to aim at on a phone.
+const expected = Math.min(300, Math.round(412 * 0.72))
+check(Math.abs(open.panelWidth - expected) <= 2, 'panel is min(72%, 300px)', `${open.panelWidth}px (expected ~${expected}px)`)
 check(Number(open.scrimOpacity) > 0.3, 'scrim is visible', `opacity=${open.scrimOpacity}`)
 await shoot('02-open')
 

@@ -40,13 +40,11 @@ import { ToolCard } from './ToolCard.tsx'
 /**
  * Required services.
  *
- * `layout` is needed only by the sidebar takeover: the frame owns the column
- * geometry, so a replacement drawer cannot expand itself — it has to ask
- * `ctx.layout.toggleSidebar()`. Declaring it unconditionally is harmless
- * (`ui-layout` is mounted before any occupant can register) and keeps the
- * plugin's dependency list honest about what the drawer needs.
+ * `uiWorkspace` supplies the drawer's navigation. Declaring it is what makes
+ * `ctx.uiWorkspace` available inside the inject face; components never see
+ * `ctx` themselves.
  */
-export const inject = ['slots', 'layout']
+export const inject = ['slots', 'layout', 'uiWorkspace']
 
 /** Order for the splash cell; lower renders first within the list. */
 const SPLASH_ORDER = 10
@@ -104,7 +102,25 @@ export function apply(ctx: ClientContext): void {
   if (FEATURES.drawerOverlay) {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
-        { name: 'shell.overlay', id: 'mobile-ui-drawer', order: DRAWER_ORDER },
+        {
+          name: 'shell.overlay',
+          id: 'mobile-ui-drawer',
+          order: DRAWER_ORDER,
+          // Components never see `ctx`, so the navigation calls arrive through
+          // the inject face. `uiWorkspace` owns both: `openSession` selects a
+          // session, `openWorkspace` connects a workspace and opens its
+          // session. Returning plain callbacks keeps the face to data plus
+          // behavior, as the slot contract requires.
+          inject: () => ({
+            openSession: (sessionId: string): void => { ctx.uiWorkspace.openSession(sessionId) },
+            openWorkspace: (workspaceId: string): void => {
+              // Fire and forget: `openWorkspace` returns a promise that settles
+              // when navigation commits, and the drawer closes immediately so
+              // the reader sees the conversation it navigates to.
+              void ctx.uiWorkspace.openWorkspace(workspaceId)
+            },
+          }),
+        },
         DrawerOverlay,
       ))
   }

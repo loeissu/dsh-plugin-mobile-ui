@@ -220,12 +220,59 @@ for (const { options, component } of registered) {
 }
 
 /**
- * Plausible owner props per slot, so each component body can be executed.
- * Values mirror the published owner shares.
+ * Fixture for the drawer's data hooks.
+ *
+ * Deliberately exercises the filtering and grouping the component performs
+ * rather than handing it an empty state: a running session, a completed one, a
+ * subagent (must be filtered), a blank placeholder (must be filtered), and an
+ * archived id. A render over this fixture proves the list logic runs.
  */
-function renderPropsFor(slot) {
+const DRAWER_FIXTURE = {
+  workspaces: {
+    items: [
+      { workspaceId: 'ws-1', path: 'H:\\DSH', title: 'DSH', sessionIds: ['s-1', 's-2', 's-3', 's-5'] },
+      { workspaceId: 'ws-2', path: 'C:\\other', title: 'other', sessionIds: ['s-4'] },
+    ],
+    archivedSessionIds: ['s-5'],
+    state: 'idle',
+    phase: 'ready',
+  },
+  sessions: {
+    ids: ['s-1', 's-2', 's-3', 's-4', 's-5'],
+    byId: {
+      's-1': { id: 's-1', displayTitle: '运行中的会话', running: true, blank: false, updatedAt: Date.now() - 1000 },
+      's-2': { id: 's-2', displayTitle: '完成的会话', running: false, completed: true, blank: false, updatedAt: Date.now() - 90_000_000 },
+      's-3': { id: 's-3', displayTitle: '子代理', running: false, origin: 'subagent', blank: false, updatedAt: Date.now() },
+      's-4': { id: 's-4', displayTitle: '空占位', running: false, blank: true, updatedAt: Date.now() },
+      's-5': { id: 's-5', displayTitle: '已归档', running: false, blank: false, updatedAt: Date.now() },
+    },
+    current: 's-1',
+    phase: 'ready',
+  },
+}
+
+/**
+ * Plausible props per registration, so each component body can be executed.
+ *
+ * Keyed by slot and, where a slot has several occupants, by the registration
+ * id — `shell.overlay` carries both the splash and the drawer, and they take
+ * different props.
+ * @param slot - the slot name.
+ * @param id - the registration id, when it declared one.
+ * @returns props to render the component with.
+ */
+function renderPropsFor(slot, id) {
   switch (slot) {
     case 'shell.overlay':
+      if (id === 'mobile-ui-drawer') {
+        return {
+          // Selector hooks: the real ones take a selector and return its result.
+          useSessions: (selector) => selector(DRAWER_FIXTURE.sessions),
+          useWorkspaces: (selector) => selector(DRAWER_FIXTURE.workspaces),
+          openSession: () => {},
+          openWorkspace: () => {},
+        }
+      }
       return {}
     case 'settings.section':
       return { close: () => {} }
@@ -236,7 +283,7 @@ function renderPropsFor(slot) {
         block: { name: 'bash', argsRaw: '{"command":"ls src/"}', subCalls: [] },
       }
     case 'sidebar':
-      return { collapsed: false, width: 280, renderSlot: () => null }
+      return { collapsed: false, width: 280, renderSlot: () => null, toggleSidebar: () => {} }
     default:
       return {}
   }
@@ -246,7 +293,7 @@ function renderPropsFor(slot) {
 // its body, which catches thrown errors, bad JSX and undefined tokens that a
 // registration-only check would miss.
 for (const { options, component } of registered) {
-  const props = renderPropsFor(options.name)
+  const props = renderPropsFor(options.name, options.id)
   let tree
   try {
     tree = component(props)
