@@ -32,7 +32,6 @@
  * off-canvas and the frame keeps a compact rail, which is the behaviour the
  * frame expects from its occupant.
  */
-import { useState } from 'react'
 import { t } from './config.ts'
 import { injectStyles, TOKEN, V } from './theme.ts'
 
@@ -47,6 +46,11 @@ export interface DrawerProps {
    * renderer from the registration's `children` table.
    */
   readonly renderSlot: (key: DrawerChildKey, opts?: { fallback?: unknown }) => unknown
+  /**
+   * Ask the frame to expand or collapse the column. Injected, because the frame
+   * owns the geometry: the occupant cannot widen its own column.
+   */
+  readonly toggleSidebar: () => void
 }
 
 /** Every seat this takeover re-declares, and therefore must render. */
@@ -178,10 +182,12 @@ function Section({ heading, children }: { heading: string, children: unknown }) 
 export function Drawer(props: DrawerProps) {
   injectStyles(STYLE_ID, CSS)
 
-  // Local display state for the overlay behaviour on a narrow viewport. The
-  // frame's `collapsed` remains authoritative for the reserved column width.
-  const [open, setOpen] = useState(!props.collapsed)
-  const collapsed = props.collapsed || !open
+  // `collapsed` is the frame's own state and the only authority on column
+  // width; there is no local mirror of it. An earlier version kept a local
+  // `open` flag and computed `collapsed = props.collapsed || !open`, which
+  // could never expand once the frame reported collapsed — the toggle appeared
+  // dead. Expanding means asking the frame, not flipping a local boolean.
+  const collapsed = props.collapsed
 
   return (
     <div className="dsh-mobile-drawer" data-collapsed={collapsed ? 'true' : 'false'} data-dsh-mobile-ui="drawer">
@@ -193,9 +199,9 @@ export function Drawer(props: DrawerProps) {
         <button
           type="button"
           className="dsh-mobile-drawer__toggle"
-          aria-label={t.drawerClose}
+          aria-label={collapsed ? t.drawerOpen : t.drawerClose}
           aria-expanded={!collapsed}
-          onClick={() => { setOpen((value) => !value) }}
+          onClick={() => { props.toggleSidebar() }}
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
             <path d="M2 4h12M2 8h12M2 12h8" />

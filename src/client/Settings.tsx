@@ -17,7 +17,7 @@
  */
 import { useEffect, useState } from 'react'
 import { FEATURES, t } from './config.ts'
-import { dismissSplash, setSplashStatus } from './Splash.tsx'
+import { dismissSplash, replaySplash, setSplashStatus } from './Splash.tsx'
 import { accentSoft, injectStyles, isDarkTheme, observeTheme, TOKEN, V } from './theme.ts'
 
 const STYLE_ID = 'settings'
@@ -220,8 +220,11 @@ export function SettingsSection(_props: SettingsSectionProps) {
               type="button"
               className="dsh-mobile-settings__action"
               onClick={() => {
+                // The splash is on screen for about a second at boot, so it is
+                // easy to miss; this raises it again on demand. It previously
+                // called dismissSplash(), which is the opposite of a replay.
                 setSplashStatus(t.splashPreparing)
-                dismissSplash()
+                replaySplash()
               }}
             >
               {t.settingsReplay}

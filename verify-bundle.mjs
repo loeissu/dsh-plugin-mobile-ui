@@ -185,6 +185,13 @@ if (missing.length > 0) {
   throw new Error(`apply did not register into: ${missing.join(', ')}`)
 }
 
+/**
+ * Shipped occupants this plugin deliberately shadows. Each is a `single` cell
+ * owned by a payload package, so a registration at the same priority is a hard
+ * error rather than a replacement.
+ */
+const SHADOWED_SINGLE_SLOTS = new Set(['sidebar'])
+
 for (const { options, component } of registered) {
   const { name, id, key, order, priority } = options
   console.log(
@@ -195,13 +202,19 @@ for (const { options, component } of registered) {
   if (typeof component !== 'function') {
     throw new Error(`component for ${name} is not a function`)
   }
-  // A keyed cell admits one entry per priority: registering a shipped key at
-  // the same priority throws at runtime instead of shadowing it. This was
-  // observed on a live instance, so the contract check enforces it too.
-  if (key !== undefined && !(typeof priority === 'number' && priority < 0)) {
+  // One entry per priority, for both cardinalities that can shadow. A `keyed`
+  // cell rejects a second entry for the same key, and a `single` cell rejects a
+  // second entry outright — the slot prose ("replaced, not shared") describes
+  // intent, not enforcement. Both were observed as thrown errors on a live
+  // instance, and the `single` case fails the whole plugin activation, so the
+  // contract check enforces the priority for both.
+  const shadowsSingle = SHADOWED_SINGLE_SLOTS.has(name)
+  if ((key !== undefined || shadowsSingle) && !(typeof priority === 'number' && priority < 0)) {
+    const what = key !== undefined ? `keyed registration for "${key}"` : `takeover of single slot "${name}"`
     throw new Error(
-      `keyed registration for "${key}" must declare a negative priority: a keyed `
-      + 'cell rejects a second entry at the same priority rather than shadowing it',
+      `${what} must declare a negative priority: this cell rejects a second entry `
+      + 'at the same priority rather than shadowing it, and for a single slot that '
+      + 'collision fails the entire plugin activation',
     )
   }
 }

@@ -38,6 +38,13 @@ import { createPortal } from 'react-dom'
 import { SPLASH_TIMING, t } from './config.ts'
 import { accentSoft, injectStyles, TOKEN, V } from './theme.ts'
 
+/**
+ * Plugin version, stamped by the bundler define (see `tsdown.config.ts`).
+ * Shown on a held splash so the running build can be identified from the
+ * device itself.
+ */
+declare const PLUGIN_VERSION: string
+
 const STYLE_ID = 'splash'
 
 const CSS = `
@@ -158,13 +165,57 @@ export function setSplashStatus(text: string): void {
   pushStatus?.(text)
 }
 
+/* ── replay ──────────────────────────────────────────────────────────────── */
+
+let bumpReplay: (() => void) | undefined
+
+/**
+ * Show the splash again and hold it until it is tapped.
+ *
+ * Two reasons it holds rather than auto-dismissing:
+ *
+ *  - The boot splash is on screen for about a second, which makes it awkward to
+ *    inspect. A replay is a deliberate act, so the reader gets to look.
+ *  - It is the one unambiguous way to answer "which build is this client
+ *    actually running?" — a held overlay carrying the version string cannot be
+ *    missed, whereas a one-second flash can.
+ */
+export function replaySplash(): void {
+  bumpReplay?.()
+}
+
+/**
+ * Mount point registered into `shell.overlay`.
+ *
+ * Wraps {@link Splash} so a replay can remount it: the splash returns `null`
+ * once it has faded, so replaying means constructing a fresh instance, which
+ * the `key` does. The first mount is the automatic boot splash; only a replay
+ * carries a non-zero nonce and holds.
+ * @returns the splash.
+ */
+export function SplashHost() {
+  const [nonce, setNonce] = useState(0)
+  useEffect(() => {
+    bumpReplay = () => { setNonce((n) => n + 1) }
+    return () => { bumpReplay = undefined }
+  }, [])
+  return <Splash key={nonce} hold={nonce > 0} />
+}
+
 /* ── component ───────────────────────────────────────────────────────────── */
+
+/** Props of {@link Splash}. */
+interface SplashProps {
+  /** Hold until tapped, and label the overlay with the build version. */
+  readonly hold?: boolean
+}
 
 /**
  * The splash overlay.
+ * @param props - see {@link SplashProps}.
  * @returns the overlay, or `null` once it has faded and unmounted.
  */
-export function Splash() {
+export function Splash({ hold = false }: SplashProps) {
   injectStyles(STYLE_ID, CSS)
 
   const [leaving, setLeaving] = useState(false)
@@ -185,8 +236,9 @@ export function Splash() {
     requestDismiss = beginFade
     pushStatus = (text: string) => { setStatus(text) }
 
-    const minTimer = window.setTimeout(beginFade, SPLASH_TIMING.minVisibleMs)
-    const maxTimer = window.setTimeout(beginFade, SPLASH_TIMING.maxVisibleMs)
+    // A held splash installs no timers: the reader closes it.
+    const minTimer = hold ? 0 : window.setTimeout(beginFade, SPLASH_TIMING.minVisibleMs)
+    const maxTimer = hold ? 0 : window.setTimeout(beginFade, SPLASH_TIMING.maxVisibleMs)
 
     return () => {
       window.clearTimeout(minTimer)
@@ -195,12 +247,17 @@ export function Splash() {
       requestDismiss = undefined
       pushStatus = undefined
     }
-  }, [])
+  }, [hold])
 
   if (gone) return null
 
   const overlay = (
-    <div className="dsh-mobile-splash" data-leaving={leaving ? 'true' : 'false'} data-dsh-mobile-ui="splash">
+    <div
+      className="dsh-mobile-splash"
+      data-leaving={leaving ? 'true' : 'false'}
+      data-dsh-mobile-ui="splash"
+      onClick={hold ? () => { requestDismiss?.() } : undefined}
+    >
       <svg
         className="dsh-mobile-splash__mark"
         viewBox="0 0 48 48"
@@ -223,7 +280,7 @@ export function Splash() {
 
       <div className="dsh-mobile-splash__status" role="status" aria-live="polite">
         <span className="dsh-mobile-splash__dot" />
-        <span>{status}</span>
+        <span>{hold ? `${t.splashReplayHint} · v${PLUGIN_VERSION}` : status}</span>
       </div>
     </div>
   )

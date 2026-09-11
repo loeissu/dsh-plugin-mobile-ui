@@ -33,24 +33,38 @@ import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { FEATURES } from './config.ts'
 import { DRAWER_CHILDREN, Drawer } from './Drawer.tsx'
 import { SECTION_OPTIONS, SettingsSection } from './Settings.tsx'
-import { Splash } from './Splash.tsx'
+import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
 
-/** Required service: the UI slot registry. */
-export const inject = ['slots']
+/**
+ * Required services.
+ *
+ * `layout` is needed only by the sidebar takeover: the frame owns the column
+ * geometry, so a replacement drawer cannot expand itself — it has to ask
+ * `ctx.layout.toggleSidebar()`. Declaring it unconditionally is harmless
+ * (`ui-layout` is mounted before any occupant can register) and keeps the
+ * plugin's dependency list honest about what the drawer needs.
+ */
+export const inject = ['slots', 'layout']
 
 /** Order for the splash cell; lower renders first within the list. */
 const SPLASH_ORDER = 10
 
 /**
- * Priority for tool-card registrations.
+ * Priority for any registration that SHADOWS a shipped occupant.
  *
- * Must be lower than any shipped `tool.call.toolview` entry, because a keyed
- * cell rejects a second entry at the same priority with a thrown error rather
- * than shadowing it. Lower values render, so this both avoids the collision and
- * takes the cell.
+ * Both cardinalities that can shadow behave the same way at the runtime level:
+ * a `keyed` cell and a `single` cell each admit one entry per priority, and a
+ * second registration at the same priority is a hard error rather than a
+ * replacement — the slot prose ("replaced, not shared") describes intent, not
+ * the enforcement. Lower priority renders, so a negative value both avoids the
+ * collision and wins the cell.
+ *
+ * For `single` the consequence of getting this wrong is severe: the collision
+ * fails plugin activation and the application renders its "Failed to load
+ * plugins" card, so nothing works at all.
  */
-const TOOL_CARD_PRIORITY = -100
+const SHADOW_PRIORITY = -100
 
 /**
  * Install this plugin's surfaces.
@@ -64,7 +78,7 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.inject('shell.overlay', () =>
       ctx.slots.register(
         { name: 'shell.overlay', id: 'mobile-ui-splash', order: SPLASH_ORDER },
-        Splash,
+        SplashHost,
       ))
   }
 
@@ -87,7 +101,7 @@ export function apply(ctx: ClientContext): void {
   for (const toolName of FEATURES.toolCards) {
     ctx.slots.inject('tool.call.toolview', () =>
       ctx.slots.register(
-        { name: 'tool.call.toolview', key: toolName, priority: TOOL_CARD_PRIORITY },
+        { name: 'tool.call.toolview', key: toolName, priority: SHADOW_PRIORITY },
         ToolCard,
       ))
   }
@@ -95,10 +109,43 @@ export function apply(ctx: ClientContext): void {
   // `sidebar` is single/root: this takes over the entire navigation column and
   // every seat ui-sidebar declared collapses with it, which is why the entry
   // declares them as children and renders each one back.
+  //
+  // Priority matters here for the same reason it does on a keyed cell, and
+  // getting it wrong is far worse. Observed on a live instance at priority 0:
+  //
+  //   Failed to load plugins
+  //   @deepseek-ai/dsh-client-ui-sidebar
+  //   failed to apply loader entry (@deepseek-ai/dsh-client-ui-sidebar):
+  //   single slot "sidebar" already has a registration at priority 0
+  //   (registered by ...) — register at a different priority to shadow it
+  //
+  // That is not a broken sidebar: the collision makes plugin activation fail
+  // and the whole application renders its "Failed to load plugins" card
+  // instead. A negative priority both avoids the collision and wins the cell.
+  //
+  // A priority alone is NOT sufficient to take this slot over: both entries
+  // would still declare the same six child seats, and the slot system allows one
+  // declarer per key. Observed on a live instance with the priority fixed:
+  //
+  //   failed to apply loader entry (@deepseek-ai/dsh-client-ui-sidebar):
+  //   slot "sidebar.brand.mark" is already declared (by an entry in "sidebar")
+  //
+  // So the takeover requires the shipped ui-sidebar entry to be DISABLED in the
+  // profile's cordis.patch.yml. See docs/drawer-takeover.md.
   if (FEATURES.replaceSidebar) {
     ctx.slots.inject('sidebar', () =>
       ctx.slots.register(
-        { name: 'sidebar', children: DRAWER_CHILDREN },
+        {
+          name: 'sidebar',
+          children: DRAWER_CHILDREN,
+          priority: SHADOW_PRIORITY,
+          // The frame owns the column width, so the drawer cannot expand
+          // itself; it asks the layout service instead. Components never see
+          // `ctx`, so the callback arrives through the inject face.
+          inject: () => ({
+            toggleSidebar: (): void => { ctx.layout.toggleSidebar() },
+          }),
+        },
         Drawer,
       ))
   }
