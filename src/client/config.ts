@@ -55,6 +55,9 @@ export interface Copy {
   readonly themeLight: string
   readonly splashReplayHint: string
   readonly drawerOpen: string
+  readonly drawerTitle: string
+  readonly drawerClose: string
+  readonly drawerPlaceholder: string
 }
 
 const ZH: Copy = {
@@ -88,6 +91,9 @@ const ZH: Copy = {
   themeLight: '浅色',
   splashReplayHint: '点击任意处关闭',
   drawerOpen: '展开导航',
+  drawerTitle: '导航',
+  drawerClose: '关闭',
+  drawerPlaceholder: '工作区与会话列表将在这里显示。',
 }
 
 const EN: Copy = {
@@ -121,6 +127,9 @@ const EN: Copy = {
   themeLight: 'Light',
   splashReplayHint: 'Tap anywhere to dismiss',
   drawerOpen: 'Expand navigation',
+  drawerTitle: 'Navigation',
+  drawerClose: 'Close',
+  drawerPlaceholder: 'Workspaces and sessions will appear here.',
 }
 
 /** Detect the copy language from the document, then the browser. */
@@ -169,6 +178,22 @@ export const FEATURES = {
    * mode is losing access to saved workspaces. See README.md.
    */
   replaceSidebar: false,
+  /**
+   * Mobile drawer as an overlay, in `shell.overlay`.
+   *
+   * The recommended route, and independent of {@link replaceSidebar}:
+   *
+   *  - It touches no other slot. `shell.overlay` is a `list`, so registering is
+   *    purely additive and cannot collide with a shipped occupant.
+   *  - The native sidebar is hidden with CSS on narrow screens only, rather
+   *    than being replaced or disabled. Undoing the CSS restores the 56px rail
+   *    with no drawer and no breakage, so this cannot brick the application.
+   *
+   * It does hide the shipped navigation rail, so it is still a visible change
+   * to DSH's layout — but the failure mode is "the rail comes back", not
+   * "nothing loads". See docs/overlay-drawer-step1.md.
+   */
+  drawerOverlay: true,
 } as const
 
 /** Timing for the splash, in milliseconds. */

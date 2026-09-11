@@ -32,6 +32,7 @@ import type { Context as ClientContext } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import { FEATURES } from './config.ts'
 import { DRAWER_CHILDREN, Drawer } from './Drawer.tsx'
+import { DrawerOverlay } from './DrawerOverlay.tsx'
 import { SECTION_OPTIONS, SettingsSection } from './Settings.tsx'
 import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
@@ -49,6 +50,16 @@ export const inject = ['slots', 'layout']
 
 /** Order for the splash cell; lower renders first within the list. */
 const SPLASH_ORDER = 10
+
+/**
+ * Order for the drawer overlay.
+ *
+ * Above the splash (which uses {@link SPLASH_ORDER}): the splash covers the
+ * whole viewport while it is up, so a drawer rendered beneath it would be
+ * unreachable for that second. Both are `list` cells, so this is only ordering,
+ * not competition.
+ */
+const DRAWER_ORDER = 20
 
 /**
  * Priority for any registration that SHADOWS a shipped occupant.
@@ -85,6 +96,17 @@ export function apply(ctx: ClientContext): void {
   if (FEATURES.settings) {
     ctx.slots.inject('settings.section', () =>
       ctx.slots.register(SECTION_OPTIONS, SettingsSection))
+  }
+
+  // The drawer overlay. `shell.overlay` is a `list`, so this is additive: it
+  // sits beside the shipped entries rather than competing with any of them, and
+  // it is the only surface here that has no shipped occupant to argue with.
+  if (FEATURES.drawerOverlay) {
+    ctx.slots.inject('shell.overlay', () =>
+      ctx.slots.register(
+        { name: 'shell.overlay', id: 'mobile-ui-drawer', order: DRAWER_ORDER },
+        DrawerOverlay,
+      ))
   }
 
   // Keyed dispatch: one registration per tool name, each shadowing that tool's
