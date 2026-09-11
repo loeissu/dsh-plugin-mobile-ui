@@ -34,6 +34,7 @@
  * at `opacity: 0` would keep an invisible surface sitting over the application.
  */
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { SPLASH_TIMING, t } from './config.ts'
 import { accentSoft, injectStyles, TOKEN, V } from './theme.ts'
 
@@ -41,6 +42,11 @@ const STYLE_ID = 'splash'
 
 const CSS = `
 .dsh-mobile-splash {
+  /* Portal-hosted on <body>, so a fixed layer is viewport-relative. Without the
+     portal the outlet sits inside pI_x6G_overlayLayer, whose own
+     position:absolute makes it the containing block for fixed descendants: the
+     layer would be trapped inside the grid frame and leave the sidebar rail
+     uncovered. */
   position: fixed;
   inset: 0;
   z-index: 2147483000;
@@ -48,9 +54,14 @@ const CSS = `
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  /* Two-stop veil built from the raised-surface and base tokens, so it matches
-     DSH's own boot surface instead of introducing a second palette. */
-  background: radial-gradient(ellipse 70% 50% at 50% 42%, ${V.surface} 0%, ${V.bg} 70%);
+  /* Light mode separates surfaces by border and elevation rather than fill, so
+     bg-base and bg-layer-1 are both #fff there and a two-stop veil built from
+     them would be flat white. Mixing the label color in at low alpha gives a
+     visible wash in both schemes using only theme-owned tokens. */
+  background:
+    radial-gradient(ellipse 70% 50% at 50% 42%,
+      color-mix(in srgb, ${V.text} 6%, ${V.bg}) 0%,
+      ${V.bg} 72%);
   color: ${V.text};
   /* The overlay layer is click-through; opt back in while visible so a tap
      cannot reach the application underneath. */
@@ -188,7 +199,7 @@ export function Splash() {
 
   if (gone) return null
 
-  return (
+  const overlay = (
     <div className="dsh-mobile-splash" data-leaving={leaving ? 'true' : 'false'} data-dsh-mobile-ui="splash">
       <svg
         className="dsh-mobile-splash__mark"
@@ -199,12 +210,12 @@ export function Splash() {
       >
         <defs>
           <linearGradient id="dsh-mobile-ui-mark" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="currentColor" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="currentColor" stopOpacity="0.45" />
+            <stop offset="0%" stopColor="currentColor" stopOpacity="1" />
+            <stop offset="100%" stopColor="currentColor" stopOpacity="0.6" />
           </linearGradient>
         </defs>
         <circle cx="19" cy="24" r="11.5" stroke="url(#dsh-mobile-ui-mark)" strokeWidth="2.4" />
-        <circle cx="29" cy="24" r="11.5" stroke="url(#dsh-mobile-ui-mark)" strokeWidth="2.4" opacity="0.55" />
+        <circle cx="29" cy="24" r="11.5" stroke="url(#dsh-mobile-ui-mark)" strokeWidth="2.4" opacity="0.7" />
       </svg>
 
       <div className="dsh-mobile-splash__name">{t.splashName}</div>
@@ -216,4 +227,8 @@ export function Splash() {
       </div>
     </div>
   )
+
+  // Portal onto body so the fixed layer resolves against the viewport rather
+  // than the slot's absolutely-positioned ancestor inside the grid frame.
+  return typeof document === 'undefined' ? overlay : createPortal(overlay, document.body)
 }

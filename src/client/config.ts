@@ -50,6 +50,9 @@ export interface Copy {
   readonly settingsToolCards: string
   readonly settingsResetSplash: string
   readonly settingsReplay: string
+  readonly settingsFootnote: string
+  readonly themeDark: string
+  readonly themeLight: string
 }
 
 const ZH: Copy = {
@@ -78,6 +81,9 @@ const ZH: Copy = {
   settingsToolCards: '工具卡片默认展开',
   settingsResetSplash: '重放启动页',
   settingsReplay: '重放',
+  settingsFootnote: '这些界面的所有颜色都取自 DSH 自己的 --dsw-alias-* 语义 token，因此浅色与深色自动跟随宿主主题。本插件只往插槽里追加内容；除非显式配置，否则不会替换 DSH 自带的界面。',
+  themeDark: '深色',
+  themeLight: '浅色',
 }
 
 const EN: Copy = {
@@ -106,6 +112,9 @@ const EN: Copy = {
   settingsToolCards: 'Expand tool cards by default',
   settingsResetSplash: 'Replay the splash',
   settingsReplay: 'Replay',
+  settingsFootnote: 'Every color on these surfaces comes from DSH\u2019s own --dsw-alias-* semantic tokens, so light and dark follow the host theme. This plugin only adds to slots; it never replaces a shipped surface unless explicitly configured.',
+  themeDark: 'Dark',
+  themeLight: 'Light',
 }
 
 /** Detect the copy language from the document, then the browser. */

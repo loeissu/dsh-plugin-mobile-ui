@@ -200,7 +200,7 @@ export function SettingsSection(_props: SettingsSectionProps) {
               <span className="dsh-mobile-settings__chip" style={{ background: accentSoft(60) }} />
             </span>
             <span className="dsh-mobile-settings__value">
-              {dark ? 'Dark' : 'Light'}
+              {dark ? t.themeDark : t.themeLight}
             </span>
           </div>
 
@@ -230,12 +230,7 @@ export function SettingsSection(_props: SettingsSectionProps) {
         </div>
       </section>
 
-      <p className="dsh-mobile-settings__note">
-        Every color on these surfaces comes from DSH&rsquo;s own
-        <span className="dsh-mobile-settings__accent"> --dsw-alias-* </span>
-        tokens, so light and dark follow the host theme. This plugin only adds
-        slots; it never replaces a shipped surface unless explicitly configured.
-      </p>
+      <p className="dsh-mobile-settings__note">{t.settingsFootnote}</p>
     </div>
   )
 }

@@ -70,7 +70,9 @@ const jsxStub = {
 const table = {
   'react': reactStub,
   'react/jsx-runtime': jsxStub,
-  'react-dom': {},
+  // `createPortal` hosts the splash on <body> so the fixed layer resolves
+  // against the viewport rather than the slot's positioned ancestor.
+  'react-dom': { createPortal: (node) => node },
   'react-dom/client': {},
   '@deepseek-ai/cordis': {},
   '@deepseek-ai/dsh-client-store': {},
