@@ -50,7 +50,7 @@ dsh plugin --profile web add .
 | 新建会话 | 抽屉标题栏 **＋** |
 | 设置 | 抽屉底部 **设置** |
 | 手动重连 | 抽屉底部 **刷新连接** |
-| 连接状态 | 抽屉底部圆点：蓝=已连接，蓝呼吸=连接中，灰=未连接，**深色圆环=链路已断**（socket 连着但探针证明到不了电脑，此时按钮变「重新加载」） |
+| 连接状态 | 抽屉底部圆点：蓝=已连接，蓝呼吸=连接中，灰=未连接，**深色圆环=链路已断**（socket 连着但探针证明到不了电脑，此时按钮变「重试」并自动轮询） |
 | 回前台 | 页面重新可见且断线时**自动** `reconnect` |
 
 ---
@@ -183,14 +183,14 @@ drawerOverlay: true
 | 机制 | 行为 |
 |---|---|
 | 手动刷新 | `ctx.connection.reconnect()` → 旧 socket 以 **code 4000 / "reconnect requested"** 关闭、新 socket 立即建立（实测：120ms 内 `connecting → connected`）；busy 最短 700ms、上限 4s，由连接状态派生而不是定时器 |
-| **链路探针** | reconnect 之后用 `fetch(location.href, {cache:'no-store'})` **验证请求真的到达电脑**（响应里必须有宿主注入的 `__DSH_BOOT__`）。4s 超时 |
-| **链路已断（第三态）** | 探针失败 = socket 连着但后面没有隧道 → 状态点变成 `dead`（主标签色圆环 + 文案「链路已断」），按钮变成 **「重新加载」**（点击 `location.reload()`） |
-| 前台回归 | page 变 visible 时**自动跑一次探针**，不需要用户点；`state === 'disconnected'` 时仍会 reconnect（2.5s 防抖） |
+| **链路探针** | reconnect 之后用 `fetch(location.href, {cache:'no-store'})` **验证请求真的到达电脑**：响应含宿主注入的 `__DSH_BOOT__`，**或者**体量达到壳的规模（≥8KB，实测壳约 43KB；标记是宿主内部字串、不是契约，改名不该把健康链路判死）。4s 超时 |
+| **链路已断（第三态）** | 探针失败 = socket 连着但后面没有隧道 → 状态点变成 `dead`（主标签色圆环 + 文案「链路已断」），按钮变成 **「重试」**。**不导航**：只重新探测，第三态期间每 4s 自动重试（持续一分钟后 15s），恢复即自动接上 |
+| 前台回归 | page 变 visible 时**自动跑一次探针**，不需要用户点；恢复则顺带 reconnect；`state === 'disconnected'` 时仍会 reconnect（2.5s 防抖） |
 | 状态点 | 订阅 `ctx.connection.state`，四种：蓝填充=已连接 / 蓝脉冲=连接中 / 灰填充=未连接 / 深色圆环=链路已断 |
 
-**为什么需要探针（这是手机上「点了没用」的根因）**：手机上页面的 origin 是 **tether App 内的回环代理** `http://127.0.0.1:<端口>`（tether 自己的 CHANGELOG 写明），所以 app socket 的对端是**手机本机的代理**，不是电脑。App 切后台后真正断掉的是代理背后的 **P2P 隧道**，而 `reconnect()` 换一条到本机代理的 socket 总是**瞬间成功** → 连接状态回到 `connected`、点变蓝，但数据到不了电脑。客户端**检测不到**这种假活：连接层没有心跳（只有 15s 的首代就绪计时），tether 注入的脚本也没有任何连接恢复（实测只有抽屉遮罩、文件查看、设备列表三件事）。
+**为什么需要探针（这是手机上「点了没用」的根因）**：手机上页面的 origin 是 **tether App 内的回环代理** `http://127.0.0.1:<端口>`（实机截图里的错误页显示的正是 `http://127.0.0.1:31407/`；tether 自己的 CHANGELOG 也写明），所以 app socket 的对端是**手机本机的代理**，不是电脑。App 切后台后真正断掉的是代理背后的 **P2P 隧道**，而 `reconnect()` 换一条到本机代理的 socket 总是**瞬间成功** → 连接状态回到 `connected`、点变蓝，但数据到不了电脑。客户端**检测不到**这种假活：连接层没有心跳（只有 15s 的首代就绪计时），tether 注入的脚本也没有任何连接恢复（实测只有抽屉遮罩、文件查看、设备列表三件事）。
 
-**所以**：假活时点「重新加载」才是对的动作——重新加载会重跑握手，而 tether 客户端在每次页面加载时都会重建隧道（主机日志里每次「手机已开始加载界面」后面都跟着一条新的 `连接路径: P2P 直连(NAT 打洞成功)`）。如果连重新加载也回不来，问题在更外层（Android 客户端的配对/认证，主机 err 日志里能看到 `authentication failed`），需要去 tether 的「主机」页重新配对。
+**为什么是「重试」而不是「重新加载」（真机教出来的）**：最初这里做的是 `location.reload()`，理由是主机日志显示每次页面加载都会重建隧道。实机上它是**灾难**：代理不在时重载连文档都取不到，WebView 直接落到 Chrome 错误页 —— 用户截图显示 `位于 http://127.0.0.1:31407/ 的网页无法加载，net::ERR_SOCKET_NOT_CONNECTED`，App 卡在死页面上只能杀掉重开。**所以任何自动导航都必须去掉**：重试只发一个请求、从不离开页面，代理一恢复（tether 客户端重建隧道）就自动接上。若长时间仍是「链路已断」，问题在更外层（Android 客户端的配对/认证，主机 err 日志里能看到 `authentication failed`），需要去 tether 的「主机」页重新配对。
 
 ---
 
@@ -317,7 +317,7 @@ node tools/verify-conversation-touch.mjs $url   # 宿主会话控件的命中区
 node tools/verify-conversation-chrome.mjs $url  # 会话标题空间 + 底部指标行不裁字（412/360）
 node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行控件不压 tab 条、五个 tab 不需横滚
 node tools/verify-swipe-and-landscape.mjs $url  # 设置页左右滑动切换分区 + 横屏手机保留移动端表面
-node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时给出「重新加载」
+node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时「重试」且绝不导航 + 恢复自愈
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```

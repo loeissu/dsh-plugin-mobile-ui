@@ -109,22 +109,34 @@ await sleep(2500)
 const dead = await ui()
 console.log('  after tap with a fake proxy answer:', JSON.stringify(dead))
 check(dead.dead === 'true', 'the button reports the link as dead', `data-dead=${dead.dead}`)
-check(dead.label === '重新加载', 'the button offers a reload instead of a useless reconnect', `label=${dead.label}`)
+check(dead.label === '重试', 'the button offers a retry instead of a useless reconnect', `label=${dead.label}`)
 check(dead.dot === 'dead', 'the dot shows the third state', `dot=${dead.dot}`)
 check(dead.announce === '链路已断', 'the state is announced as text', `announce=${dead.announce}`)
 
-console.log('\n## 3. and a tap on the dead state re-probes before escalating')
-await ev(`(() => { window.fetch = window.__realFetch; window.__noReload = true; return 'restored' })()`)
-// With the host answering again, a tap must clear the dead state WITHOUT reloading:
-// a reload would throw away the draft and the streaming turn, so it is the
-// escalation for a link that is still unreachable, not the first move.
+console.log('\n## 3. a tap on the dead state retries — and NEVER navigates')
+// This is the regression the device reported: with the page served from tether's
+// loopback proxy, a reload when the proxy is gone fails at the document level and
+// strands the user on Chrome's error page (net::ERR_SOCKET_NOT_CONNECTED). The
+// sentinel survives a retry and disappears on any navigation.
+await ev(`(() => { window.__noReload = true; return 'armed' })()`)
 await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-refresh"]').click()`)
 await sleep(2500)
-const back = await ui()
-const stillHere = await ev(`window.__noReload === true`)
-console.log('  after restore:', JSON.stringify(back), 'same document:', stillHere)
-check(back.dead === 'false' && back.label === '刷新连接', 'a tap on the dead state clears it once the host answers', JSON.stringify(back))
-check(stillHere === true, 'and it did so without reloading the page', `same document=${stillHere}`)
+const stillDead = await ui()
+const aliveDoc = await ev(`window.__noReload === true`)
+console.log('  after a tap while still dead:', JSON.stringify(stillDead), 'same document:', aliveDoc)
+check(aliveDoc === true, 'a tap on the dead state does not navigate away', `same document=${aliveDoc}`)
+check(stillDead.dead === 'true', 'and it stays honest about the link still being down', `data-dead=${stillDead.dead}`)
+check(stillDead.label === '重试', 'offering another retry, not a reload', `label=${stillDead.label}`)
+
+console.log('\n## 4. and it heals itself once the host answers again, with no tap')
+await ev(`(() => { window.fetch = window.__realFetch; return 'restored' })()`)
+// The retry loop runs on its own (4s cadence); wait past one attempt.
+await sleep(6500)
+const healed = await ui()
+console.log('  after the host came back:', JSON.stringify(healed))
+check(healed.dead === 'false' && healed.label === '刷新连接', 'the dead state clears by itself', JSON.stringify(healed))
+check(await ev(`window.__noReload === true`) === true, 'still without navigating', 'same document')
+check(healed.dot === 'connected', 'and the dot returns to connected', `dot=${healed.dot}`)
 
 ws.close()
 console.log('')

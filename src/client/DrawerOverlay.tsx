@@ -120,6 +120,10 @@ const LINK_PROBE_MARK = '__DSH_BOOT__'
  */
 const LINK_PROBE_MIN_BYTES = 8000
 
+/** Retry cadence while the link is dead: brisk at first, then patient. */
+const LINK_RETRY_MS = 4000
+const LINK_RETRY_SLOW_MS = 15000
+
 const CSS = `
 /* ── the drawer exists only on narrow screens ──────────────────────────────
    HIDDEN BY DEFAULT, enabled by the media query below — not the other way round.
@@ -975,11 +979,56 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   useEffect(() => {
     const onVisible = (): void => {
       if (document.visibilityState !== 'visible') return
-      void probeLink().then((alive) => { setLinkDead(!alive) })
+      void probeLink().then((alive) => {
+        setLinkDead(!alive)
+        if (alive) props.reconnect?.()
+      })
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => { document.removeEventListener('visibilitychange', onVisible) }
   }, [probeLink])
+
+  /**
+   * Self-heal while the link is dead, by RETRYING — never by navigating.
+   *
+   * A reload was tried here and it was wrong on a real device: the phone's page is
+   * served from the tether app's own loopback proxy, so when that proxy is what went
+   * away, `location.reload()` cannot even fetch the document and the WebView lands on
+   * Chrome's error page (`net::ERR_SOCKET_NOT_CONNECTED`, reported with a screenshot)
+   * — an app the user has to kill and reopen. Retrying costs one request and works
+   * the moment the tether client rebuilds the proxy/tunnel, which is the actual
+   * recovery path; nothing here ever leaves the page.
+   *
+   * Cadence: every 4s for the first minute, then every 15s, so a long outage does not
+   * turn into a battery drain. A successful probe also reconnects the socket, because
+   * the wire may have gone stale while the proxy was away.
+   */
+  useEffect(() => {
+    if (!linkDead) return
+    let attempts = 0
+    let timer: number | undefined
+    let cancelled = false
+
+    const attempt = (): void => {
+      if (cancelled) return
+      attempts += 1
+      void probeLink().then((alive) => {
+        if (cancelled) return
+        if (alive) {
+          setLinkDead(false)
+          props.reconnect?.()
+          return
+        }
+        timer = window.setTimeout(attempt, attempts < 15 ? LINK_RETRY_MS : LINK_RETRY_SLOW_MS)
+      })
+    }
+
+    timer = window.setTimeout(attempt, LINK_RETRY_MS)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [linkDead, probeLink, props])
 
   /**
    * Refresh is "busy" until the wire confirms the reconnect.
@@ -1480,28 +1529,26 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
             data-dsh-mobile-ui="drawer-refresh"
             data-busy={refreshBusy ? 'true' : 'false'}
             data-dead={linkDead ? 'true' : 'false'}
-            aria-label={linkDead ? t.drawerReload : t.drawerRefresh}
+            aria-label={linkDead ? t.drawerRetry : t.drawerRefresh}
+            title={linkDead ? t.drawerRetryHint : undefined}
             aria-busy={refreshBusy}
             onClick={() => {
-              // The dead state is a CLAIM about the last probe, so a tap re-checks it
-              // before escalating: a probe that timed out on slow mobile data, or one
-              // that raced the reconnect handshake, must not steer the user into a
-              // full reload (which costs the draft and the streaming turn) when the
-              // cheap reconnect would have done. Reloading is the escalation for a
-              // link that is STILL unreachable, because at that point the socket's
-              // peer — the phone's own proxy — cannot be fixed from here, while a
-              // reload re-runs the handshake the Tether client needs to rebuild the
-              // tunnel behind it (the host log shows every page load rebuilding it).
+              // The dead state is a CLAIM about the last probe, so a tap re-checks it.
+              // It NEVER navigates: the page is served from the tether app's loopback
+              // proxy, and when that proxy is what went away a reload fails at the
+              // document level and strands the user on Chrome's error page
+              // (net::ERR_SOCKET_NOT_CONNECTED, reported from a device) with no way
+              // back into the app. Retrying recovers by itself as soon as the proxy is
+              // back, which is what the probe above and below this handler exist for.
               if (linkDead) {
                 if (refreshBusy) return
                 setReconnecting(true)
                 void probeLink().then((alive) => {
                   if (alive) {
                     setLinkDead(false)
-                    setReconnecting(false)
-                    return
+                    props.reconnect?.()
                   }
-                  window.location.reload()
+                  setReconnecting(false)
                 })
                 return
               }
@@ -1544,7 +1591,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
               <path d="M14.5 8.2A5.6 5.6 0 1 1 12.4 4" />
               <path d="M12.2 1.8v3.2h3.2" />
             </svg>
-            <span>{refreshBusy ? t.drawerRefreshed : linkDead ? t.drawerReload : t.drawerRefresh}</span>
+            <span>{refreshBusy ? t.drawerRefreshed : linkDead ? t.drawerRetry : t.drawerRefresh}</span>
           </button>
         </div>
       </div>

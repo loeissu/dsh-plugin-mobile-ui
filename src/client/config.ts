@@ -63,11 +63,16 @@ export interface Copy {
    * On the phone the app socket's peer is the Tether client's loopback proxy, not
    * the PC: reconnecting to that proxy always succeeds, so the connection state
    * claims "connected" while nothing can reach the host. When the liveness probe
-   * proves that, the button stops offering a reconnect (which cannot work) and
-   * offers a reload instead — that re-runs the handshake the Tether client needs
-   * to rebuild its tunnel.
+   * proves that, the button stops offering a reconnect (which cannot work at that
+   * layer) and offers a RETRY, which keeps polling until the proxy answers again.
+   *
+   * It deliberately does not reload: a reload navigates to the page URL, and when
+   * the proxy is what went away that navigation fails at the document level, leaving
+   * the user on Chrome's error page (net::ERR_SOCKET_NOT_CONNECTED, reported with a
+   * screenshot from a device) with no way back into the app.
    */
-  readonly drawerReload: string
+  readonly drawerRetry: string
+  readonly drawerRetryHint: string
   readonly connLinkDead: string
   readonly drawerNewSession: string
   readonly connConnected: string
@@ -122,7 +127,8 @@ const ZH: Copy = {
   drawerSettings: '设置',
   drawerRefresh: '刷新连接',
   drawerRefreshed: '已刷新',
-  drawerReload: '重新加载',
+  drawerRetry: '重试',
+  drawerRetryHint: '链路已断：正在自动重试，恢复后会自动接上',
   drawerNewSession: '新建会话',
   connConnected: '已连接',
   connConnecting: '连接中',
@@ -177,7 +183,8 @@ const EN: Copy = {
   drawerSettings: 'Settings',
   drawerRefresh: 'Reconnect',
   drawerRefreshed: 'Refreshed',
-  drawerReload: 'Reload',
+  drawerRetry: 'Retry',
+  drawerRetryHint: 'Link down — retrying automatically; it reconnects on its own',
   drawerNewSession: 'New session',
   connConnected: 'Connected',
   connConnecting: 'Connecting',

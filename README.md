@@ -1,4 +1,4 @@
-﻿# dsh-plugin-mobile-ui
+# dsh-plugin-mobile-ui
 
 把 DeepSeek Harness 的 Web 界面改造成**手机能用**的界面。以官方 slot 客户端插件交付：不改 DSH 源码、不 fork dsh-tether、不替换 `sidebar` 插槽。
 
@@ -42,12 +42,14 @@ npm run bundle          # 重新构建（含反引号预检）
 | 换工作区、开会话 | 抽屉里分组列表：**刚刚 / 今天 / 昨天 / 更早** |
 | 新建会话 | 抽屉底部 **＋** |
 | 打开主机设置 | 抽屉底部 **设置**（可以在设置页里**左右滑动**换分区） |
-| 连接看起来卡住 | 抽屉底部 **刷新连接**：换掉 mux socket。若探针证明链路其实断了，按钮会变成 **重新加载**（详见下） |
+| 连接看起来卡住 | 抽屉底部 **刷新连接**：换掉 mux socket。若探针证明链路其实断了，按钮会变成 **重试**，并每 4s（一分钟后 15s）自动重试直到恢复（详见下） |
 | 看连接状态 | 抽屉底部状态点：蓝=已连接 / 蓝脉冲=连接中 / 灰=未连接 / 深色圆环=链路已断 |
 | 看工具输出 | 工具卡默认折叠；**失败卡自动展开** |
 | 横屏 | 和竖屏同一套界面（抽屉、命中区、设置页都在） |
 
-**为什么会有「重新加载」**：手机上页面的 origin 是 tether App 内的回环代理，app socket 的对端是**手机本机代理**而不是电脑。App 切后台后真正断掉的是代理背后的 P2P 隧道，而「刷新连接」换一条到本机代理的 socket 总是瞬间成功——状态回到已连接、点变蓝，数据却到不了电脑。所以点击后会实测一次链路（拉本页并要求响应来自电脑），确认断了才把按钮换成「重新加载」；重新加载会重跑握手，tether 客户端据此重建隧道。
+**为什么会有「重试」，以及为什么它不重新加载**：手机上页面的 origin 是 tether App 内的回环代理，app socket 的对端是**手机本机代理**而不是电脑。App 切后台后真正断掉的是代理背后的 P2P 隧道，而「刷新连接」换一条到本机代理的 socket 总是瞬间成功——状态回到已连接、点变蓝，数据却到不了电脑。所以点击后会实测一次链路（拉本页并要求响应来自电脑），确认断了才把按钮换成**重试**。
+
+**不重新加载是被真机教出来的**：代理不在时 `location.reload()` 连文档都取不到，WebView 直接落到 Chrome 错误页（`net::ERR_SOCKET_NOT_CONNECTED`，实机截图报告），用户只能杀掉 App 重开。**"重试"不会有这个问题**：它只发一个请求，代理一恢复（tether 客户端重建隧道）就自动接上，页面从不离开。第三态期间每 4s 自动重试一次（持续一分钟后改为每 15s），点按钮也会立刻重试。
 
 ## 开关
 
@@ -83,7 +85,7 @@ node tools/verify-render.mjs <url>              # 有浏览器时：逐项 CDP �
 | `verify-drawer-open` / `verify-nav-tab-locale` | 「导航」入口；中英文标签下让位宽度都正确 |
 | `verify-drawer-swipe` / `verify-touch-scroll` | 左滑关闭；面板在触摸下真的能滚 |
 | `verify-drawer-list` / `-new-session` / `-settings` / `-refresh` / `-windowing` / `verify-conn-dot` | 面板内容与状态 |
-| `verify-refresh-honesty` | 刷新连接换 socket；链路假活时给出「重新加载」且不误触发 |
+| `verify-refresh-honesty` | 刷新连接换 socket；链路假活时改为「重试」且**不会导航**、恢复后自愈 |
 | `verify-tap-targets` / `verify-conversation-touch` | 手机控件命中区 ≥44px |
 | `verify-conversation-chrome` | 会话标题让位、底部指标行不裁字 |
 | `verify-settings-chrome` | 设置弹层：标题行不压 tab 条、320–430px 五个 tab 不需横滚 |

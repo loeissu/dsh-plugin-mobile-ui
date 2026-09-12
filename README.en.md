@@ -50,18 +50,24 @@ Without that plugin in your profile, restart `dsh web`.
 | Switch workspace or session | Grouped list: just now / today / yesterday / earlier |
 | New session | **＋** at the foot of the panel |
 | Host settings | **设置** at the foot of the panel; swipe left/right there to change section |
-| Connection looks stuck | **刷新连接** replaces the mux socket; if the liveness probe proves the link is down, the button becomes **重新加载** |
+| Connection looks stuck | **刷新连接** replaces the mux socket; if the liveness probe proves the link is down, the button becomes **重试** and retries on its own every 4s (15s after the first minute) until the link is back |
 | Connection state | Dot in the panel foot: blue = connected, pulsing = connecting, grey = disconnected, dark ring = link down |
 | Tool output | Cards are collapsed by default; **failed cards open themselves** |
 | Landscape | Same mobile UI as portrait — drawer, hit areas and settings page included |
 
-**Why 重新加载 exists.** On a phone the page is served from tether's own loopback
-proxy, so the app socket's peer is the phone, not the computer. When the app is
-backgrounded the P2P tunnel behind that proxy can die while the local socket keeps
-connecting instantly: the state returns to "connected" and nothing reaches the host.
-A tap therefore probes the link for real (it fetches this page and requires the answer
-to have come from the host) and only then offers a reload, which re-runs the handshake
-the tether client needs to rebuild the tunnel.
+**Why a retry, and why it does not reload.** On a phone the page is served from
+tether's own loopback proxy, so the app socket's peer is the phone, not the computer.
+When the app is backgrounded the P2P tunnel behind that proxy can die while the local
+socket keeps connecting instantly: the state returns to "connected" and nothing reaches
+the host. A tap therefore probes the link for real (it fetches this page and requires
+the answer to have come from the host) and only then switches the button to **重试**.
+
+**Not reloading was learned from a device.** With the proxy gone, `location.reload()`
+cannot even fetch the document and the WebView lands on Chrome's error page
+(`net::ERR_SOCKET_NOT_CONNECTED`, reported with a screenshot) — an app to kill and
+reopen. A retry costs one request, survives the outage, and reconnects by itself the
+moment tether rebuilds the proxy/tunnel; the page never leaves. While the link is down
+it retries every 4s (15s after the first minute), and a tap retries immediately.
 
 ## Feature flags
 
