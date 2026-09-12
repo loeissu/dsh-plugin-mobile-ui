@@ -72,7 +72,7 @@ dsh plugin --profile web add .
 | 能力 | 文件 | 说明 |
 |---|---|---|
 | 键盘适配 | `viewport.ts` | `visualViewport` 缩 frame；**缓解，非根治** |
-| tether 兼容 | `tether-compat.ts` | 反制 tether 过宽 `_row` 选择器 |
+| tether 兼容 | `tether-compat.ts` | 反制 tether 过宽选择器：① `_row` 规则压扁排队栏；② 模态框规则让确认弹层标题压住正文、按钮被卡片裁掉 |
 | 排版基线 | `typography.ts` | 关 WebView 字体放大、行高下限、去点按闪灰 |
 | 主机设置弹层排版 | `settings-chrome.ts` | 窄屏字号/间距/主题三列 |
 | 键盘诊断徽章 | `keyboard-debug.ts` | 临时，默认关 |
@@ -255,6 +255,7 @@ node tools/verify-resume-reconnect.mjs $url
 node tools/verify-splash-warm.mjs $url
 node tools/verify-toolcards.mjs $url <out-dir>
 node tools/verify-title-marquee.mjs $url <out-dir>
+node tools/verify-risk-dialog.mjs $url          # 确认弹层：标题在正文之上、按钮不被卡片裁掉
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```
 
@@ -295,7 +296,7 @@ docs/                           报告与日志
 |---|---|
 | 键盘真机行为 | 客户端只能缓解；根治要改 APK |
 | 无 adb / 无真机自动化 | 触摸、IME、tether 真机宽度未在 CI 验证 |
-| tether `_row` 选择器过宽 | 上游缺陷；我们用窄范围反制 |
+| tether 选择器过宽 | 上游缺陷，两处：`_row` 规则压扁排队栏；模态框规则（全屏 + header 绝对定位 + 对 content-box 用 `width:100%`）让确认弹层标题压住正文、右侧按钮被卡片裁掉。我们用窄范围反制，见 `tether-compat.ts` |
 | `ctx.locale` 未接 | 文案按 `navigator.language` |
 | 无单元测试 / CI | 仅 CDP 脚本 |
 | GitHub PAT | 会话标题里出现过 `ghp_`；**请去 GitHub 撤销**；抽屉已脱敏显示 |

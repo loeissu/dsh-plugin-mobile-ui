@@ -122,9 +122,13 @@ keyed slot "tool.call.toolview" already has an entry for key "read" at priority 
 
 但下面三件事要在升级后复核：
 
-1. **tether 注入的窄屏 CSS**：tether 是往 HTML 里塞 `<style>`，其中 `[class*="_row"]:not([class*="rowText"]) { flex-wrap: wrap !important }` 过宽（实测命中 26 个元素），会把排队消息栏压成细条 —— `tether-compat.ts` 就是反制它。
+1. **tether 注入的窄屏 CSS**（`replace('</head>', '<style data-dsh-tether="narrow-screen">…')`，规则在 `@media (max-width: 640px)`）。当前已知两处过宽：
+   - `[class*="_row"]:not([class*="rowText"]) { flex-wrap: wrap !important }` —— 实测命中 26 个元素，把排队消息栏压成细条。
+   - 模态框规则：把**每个** `aria-modal` 弹层拉成全屏、把 `> div > [class*="_header"]` 改成绝对定位，并对 content-box 的包裹 div 用 `width:100% !important`。这三条只对设置弹层成立，套到「确认启用完全权限？」这类确认弹层上：标题压住正文（header 脱离文档流），右侧按钮被卡片裁掉（footer 388px 挤进 340px 卡片）。
+
+   两处都由 `tether-compat.ts` 窄范围反制（反制规则只作用于「无 nav 条」的模态框，设置弹层保留 tether 的全屏处理）。
    - 上游修好 → 把 `FEATURES.tetherCompat` 关掉，`tether-compat.ts` 可以删。
-   - 上游改名/换注入方式 → 反制规则空转，**无副作用**，但排队栏要重新看一眼。
+   - 上游改名/换注入方式 → 反制规则空转，**无副作用**；但排队栏、确认弹层各看一眼（`node tools/verify-risk-dialog.mjs <url>`）。
 2. **键盘**：若新 APK 补上 `android:windowSoftInputMode="adjustResize"`（或走 edge-to-edge 的 `Type.ime()` insets），**建议关掉 `FEATURES.keyboardFit`** —— `viewport.ts` 的 200ms 轮询与点击后 `blur→refocus` 就不必再跑。反过来，若新客户端的 WebView 改了 `visualViewport` 行为，先看 `keyboard-debug` 徽章（`FEATURES.keyboardDebug = true`）再调阈值。
 3. **tether 的注入方式**：它是 `replace('</head>', '<style>…')`。若改成别的机制或加了 CSP，重跑 §3.4 的 3–5 步。
 
@@ -134,9 +138,9 @@ keyed slot "tool.call.toolview" already has an entry for key "read" at priority 
 
 ## 5. 维护成本
 
-- 源码 **3685 行 / 15 个文件**；最大单文件 `DrawerOverlay.tsx` **1085 行**（欠账 P2-9：待拆分）。
+- 源码 **3792 行 / 15 个文件**；最大单文件 `DrawerOverlay.tsx` **1085 行**（欠账 P2-9：待拆分）。
 - 设计面收敛得比较好：`theme.ts` 统一 `TYPE`/`R`/`MOTION` token，颜色全走 `--dsw-alias-*`；`config.ts` 一个 `FEATURES` 表 + zh/en 文案，关功能不用改组件。
-- 验证：`verify-bundle.mjs`（离线、无浏览器）+ 34 个 CDP 脚本。**没有单元测试、没有 CI**。
+- 验证：`verify-bundle.mjs`（离线、无浏览器）+ 69 个 `tools/` 脚本（其中 27 个 `verify-*.mjs` 回归套件）。**没有单元测试、没有 CI**。
 - 无 adb / 无真机自动化：**触摸、IME、tether 真机宽度都没在 CI 验证过**，只能真机定论。
 - `ctx.locale` 未接，文案按 `navigator.language`。
 - `keyboard-debug.ts` 是临时诊断，默认关，问题定性后可删。

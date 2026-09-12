@@ -223,13 +223,17 @@ export const FEATURES = {
   /**
    * Counter-rules for dsh-tether's over-broad injected selectors.
    *
-   * tether's narrow-screen sheet forces `flex-wrap: wrap` on every element whose
-   * class contains `_row` — 26 elements in the shipped UI — which squashes the
-   * queued-message row in the composer into a clipped sliver. This restores that
-   * one row's layout.
+   * Two tether rules reach past the surface they were written for:
+   *
+   *  1. `flex-wrap: wrap` on every element whose class contains `_row` — 26
+   *     elements in the shipped UI — which squashes the queued-message row in the
+   *     composer into a clipped sliver.
+   *  2. a full-screen + `position: absolute` header applied to every modal dialog,
+   *     which is only correct for the settings dialog: on the risk-confirmation
+   *     dialog it makes the title land on top of its own body text.
    *
    * Touches no slot: a stylesheet only, and inert when tether is not installed.
-   * Delete once tether narrows its selector — see `src/client/tether-compat.ts`.
+   * Delete once tether narrows its selectors — see `src/client/tether-compat.ts`.
    */
   tetherCompat: true,
   /**
