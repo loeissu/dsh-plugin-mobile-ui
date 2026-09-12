@@ -54,7 +54,7 @@
  * (`android:windowSoftInputMode` or an IME insets listener in `MainActivity`),
  * which needs an APK rebuild.
  */
-import { injectStyles } from './theme.ts'
+import { injectStyles, PHONE_MEDIA } from './theme.ts'
 
 const STYLE_ID = 'viewport-fit'
 
@@ -82,7 +82,7 @@ const HEIGHT_VAR = '--dsh-mobile-vv-height'
 const TOP_VAR = '--dsh-mobile-vv-top'
 
 const CSS = `
-@media (max-width: 768px) {
+@media ${PHONE_MEDIA} {
   /* Size the app shell to the visible band. Both properties are declared with
      fallbacks that reproduce the untouched layout (full height, no offset), so
      the rule is inert until the script sets the variables. The frame is already

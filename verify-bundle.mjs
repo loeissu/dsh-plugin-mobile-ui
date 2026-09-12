@@ -172,6 +172,11 @@ const documentStub = {
   querySelector: () => null,
   querySelectorAll: () => [],
   getElementById: () => null,
+  // A real document is an event target, and several installs add listeners to it.
+  // Leaving these out made the harness fail for a module that is correct in a
+  // browser, which is the wrong signal: stub the surface, not the feature.
+  addEventListener() {},
+  removeEventListener() {},
 }
 
 Object.assign(globalThis, {

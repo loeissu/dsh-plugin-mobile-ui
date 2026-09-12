@@ -287,6 +287,15 @@ export const FEATURES = {
    */
   conversationChrome: true,
   /**
+   * Swipe left/right on the host settings dialog to change section.
+   *
+   * Phones only, either orientation: on the five-tab strip the tabs are small
+   * targets at the top of a tall dialog, and sideways swiping is the gesture a phone
+   * user already reaches for. Listeners only, disposed with the plugin; never claims
+   * a vertical drag. See `src/client/settings-swipe.ts`.
+   */
+  settingsSwipe: true,
+  /**
    * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
    * can work at all: the live viewport heights, the smallest visual-viewport
    * height seen since load, and event counters.

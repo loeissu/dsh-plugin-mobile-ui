@@ -76,6 +76,8 @@ dsh plugin --profile web add .
 | 排版基线 | `typography.ts` | 关 WebView 字体放大、行高下限、去点按闪灰 |
 | 主机设置弹层排版 | `settings-chrome.ts` | 窄屏字号/间距/主题三列 |
 | 会话控件命中区 | `conversation-chrome.ts` | 宿主的消息操作/composer/`对话`·`轨迹` 命中区扩大到 35–43px（绘制尺寸不变）；会话标题让出空间（隐藏装饰性 `/` 与重复的模式标签、子代理 chip 折叠成图标）；底部指标行不再裁字（2026-09-12 新增）|
+| 设置页左右滑动 | `settings-swipe.ts` | 在宿主设置弹层内容区左右滑动切换分区（点相邻 tab；不抢垂直滚动；到头不回绕；仅手机，横竖屏都生效；2026-09-12 新增）|
+| 手机判定（含横屏） | `theme.ts` 的 `PHONE_MEDIA` | `(max-width: 768px), (max-height: 520px) and (pointer: coarse)`：横屏手机不再因为"够宽"而掉回桌面布局（2026-09-12 新增）|
 | 键盘诊断徽章 | `keyboard-debug.ts` | 临时，默认关 |
 | 回前台自动重连 | `connection-recovery.ts` | `visibilitychange` + disconnected → reconnect |
 
@@ -88,6 +90,7 @@ keyboardFit: true
 tetherCompat: true
 typography: true
 conversationChrome: true      // 宿主会话控件的命中层（只改命中区，不改绘制）
+settingsSwipe: true           // 设置弹层左右滑动切换分区（仅手机）
 resumeReconnect: true
 keyboardDebug: false          // 临时诊断，默认关
 toolCards: ['pwsh', 'read', 'grep', 'edit', 'write']
@@ -259,6 +262,27 @@ android:windowSoftInputMode="adjustResize"
 
 版本号、主题跟随、工具卡数量、重放启动页；文案在 `config.ts` zh/en。
 
+### 左右滑动切换分区（`settings-swipe.ts`）
+
+- 在弹层**内容区**左右滑动即切换分区：向左 = 下一页，向右 = 上一页；到头不回绕
+- 实现是「点相邻的 nav 单元」——宿主用 `aria-current="true"` 标记当前分区，点击是唯一可用的杠杆，且顺带让导航条/URL/宿主行为保持一致
+- 边界：垂直拖动**永不**被认领（列表滚动照旧）；起点在 range/输入框/导航条上时不认领；仅手机（`PHONE_MEDIA`），横竖屏都生效
+- 阈值：认领 24px、切换 56px、横向必须 > 纵向 ×1.5
+
+### 横屏适配
+
+横屏手机（如 915×412）宽度超过 768px，按纯宽度判断会**整个掉回桌面布局**，所有移动端表面（抽屉、44px 命中层、设置页密度）一起失效。现在用 `PHONE_MEDIA` 同时覆盖「窄」与「矮 + 粗指针」：
+
+| 横屏实测（915×412，touch 模拟） | 结果 |
+|---|---|
+| 抽屉 / 「导航」入口 | 可用（`sidebarCol` 停靠到 −10000px、`grid 915px 0px`） |
+| 消息操作行命中区 | 35×43（`conversation-chrome` 在横屏同样生效） |
+| 设置弹层关闭按钮 | 28px 绘制 → 命中 **43px**（两方向都可用） |
+| 页面横向滚动 | 无（915/915）；宿主的宽表格由它自己的滚动容器兜住 |
+| 桌面窗口隔离 | 1600×500 的桌面窗**不**匹配（`pointer: coarse` 为假），不会误判成手机 |
+
+**顺带修掉一个只在这种矮视口才暴露的层叠 bug**：宿主把设置弹层挂在侧栏列里，而该列被我们"停靠"时是 `position: fixed` —— **`position: fixed` 会创建层叠上下文**，把弹层自身的 `z-index: 1000` 关在里面。竖屏时 tether 会给该列 `z-index: 30` 所以没事；横屏 tether 的 ≤640 规则不生效，那一列 z-index 变成 auto，于是**应用顶栏（z-index: 1）盖住了弹层顶部**（实测：关闭按钮被 tab 条压住、点不到）。现在停靠规则自己带 `z-index: 40`，不再依赖 tether。
+
 ---
 
 ## 11. 验证
@@ -291,6 +315,7 @@ node tools/verify-tap-targets.mjs $url          # 插件自己控件的真实命
 node tools/verify-conversation-touch.mjs $url   # 宿主会话控件的命中区（消息操作/composer/tab）
 node tools/verify-conversation-chrome.mjs $url  # 会话标题空间 + 底部指标行不裁字（412/360）
 node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行控件不压 tab 条、五个 tab 不需横滚
+node tools/verify-swipe-and-landscape.mjs $url  # 设置页左右滑动切换分区 + 横屏手机保留移动端表面
 node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时给出「重新加载」
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机

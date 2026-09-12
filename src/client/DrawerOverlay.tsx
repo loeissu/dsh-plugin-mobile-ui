@@ -58,7 +58,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from './config.ts'
-import { injectStyles, MOTION, R, SPACE, TOKEN, TYPE, TYPE_LH, V, Z } from './theme.ts'
+import { injectStyles, MOTION, PHONE_MEDIA, R, SPACE, TOKEN, TYPE, TYPE_LH, V, Z } from './theme.ts'
 
 const STYLE_ID = 'drawer'
 
@@ -70,7 +70,8 @@ const STYLE_ID = 'drawer'
  * there — useful precisely because it makes "is this the plugin or DSH?"
  * unambiguous while debugging.
  */
-const NARROW = '(max-width: 768px)'
+/** The plugin's phone condition, landscape included; see `PHONE_MEDIA`. */
+const NARROW = PHONE_MEDIA
 
 /**
  * Shortest overhang worth animating.
@@ -160,6 +161,18 @@ const CSS = `
     height: 0 !important;
     overflow: visible !important;
     pointer-events: none !important;
+    /* The overlay above the app chrome, and why it is needed here.
+     *
+     * The host mounts its settings dialog inside this column, and that dialog is a
+     * fixed overlay with z-index 1000 — but position:fixed makes THIS element a
+     * stacking context, so the dialog's 1000 is scoped inside it and cannot compete
+     * with the app's own header. Portrait survived because tether's parking rule
+     * gives the column z-index 30; landscape (where tether's max-width:640 rules do
+     * not apply) fell back to this rule, which had no z-index at all, so the app
+     * header (z-index 1) painted OVER the dialog's top row — measured: the close
+     * button sat under the tab strip and could not be tapped. 40 clears the app
+     * chrome without approaching the drawer's own 2147482000. */
+    z-index: 40 !important;
   }
   [data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"] [role="dialog"],
   [data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"] [class*="_overlay"] {

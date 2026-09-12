@@ -21,12 +21,19 @@
  * survives CSS-Module hash rotation. Every target was checked to have no existing
  * `::after` (all `none`) and `position: static`, so the pseudo-element is free.
  */
-import { injectStyles, TYPE } from './theme.ts'
+import { injectStyles, PHONE_MEDIA, TYPE } from './theme.ts'
 
 const STYLE_ID = 'conversation-chrome'
 
-/** The plugin's phone layout breakpoint; the host chrome above it is untouched. */
-const NARROW = '(max-width: 768px)'
+/**
+ * The plugin's phone condition, landscape included.
+ *
+ * These are hit layers only — no size, position or content changes — so applying
+ * them to a phone held sideways (wide but short, coarse pointer) is exactly as safe
+ * as applying them in portrait. Without it a landscape phone loses every 44px target
+ * this module exists to provide, because the desktop layout comes back above 768px.
+ */
+const NARROW = PHONE_MEDIA
 
 /** Every control that gets a hit layer, so the `position: relative` stays in one place. */
 const TARGETS = [

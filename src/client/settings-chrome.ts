@@ -13,9 +13,11 @@
  *  - Theme cubes are full-width blocks on phones even though `cubeRow` is
  *    flex-row — force a three-up strip.
  */
-import { injectStyles, R, TYPE } from './theme.ts'
+import { injectStyles, PHONE_MEDIA, R, TYPE } from './theme.ts'
 
 const STYLE_ID = 'settings-chrome'
+
+/** The phone *density* applies to the narrow (portrait) layout only. */
 const NARROW = '(max-width: 768px)'
 
 /**
@@ -61,16 +63,6 @@ const CSS = `
     width: 32px !important;
     height: 32px !important;
     border-radius: ${R.sm} !important;
-    /* The 32px visual is deliberate (the mobile title row is tight), but the
-       HIT AREA must not shrink with it: this is the only way out of the dialog
-       on a phone. The pseudo-element widens it back to 44px without moving the
-       icon or changing the header layout. */
-    position: relative !important;
-  }
-  [role="dialog"] [class*="_close"]::after {
-    content: '';
-    position: absolute;
-    inset: -6px;
   }
 
   /* ── section nav ─────────────────────────────────────────────────── */
@@ -171,6 +163,39 @@ const CSS = `
   [role="dialog"] [class*="_themeCube"] [class*="_icon"] {
     width: 18px !important;
     height: 18px !important;
+  }
+}
+
+/*
+ * The touch layer, for phones in EITHER orientation.
+ *
+ * A phone on its side keeps the desktop dialog shape (the density block above is
+ * narrow-only, and tether's own strip rules stop at 640px), but its controls are
+ * still finger-sized needs: the close button is the only way out of the dialog, so
+ * it keeps a 44px hit area whenever the pointer is coarse, portrait or not. The
+ * 32px visual is unchanged and nothing moves.
+ */
+@media ${PHONE_MEDIA} {
+  [role="dialog"] [class*="_close"] {
+    position: relative !important;
+  }
+  [role="dialog"] [class*="_close"]::after {
+    content: '';
+    position: absolute;
+    /* -8px: the desktop dialog's close is 28px, and the pixel walk measures a
+       nominal box one pixel short, so this lands at 43 — as close to the 44px
+       target as the header row allows. */
+    inset: -8px;
+  }
+  /* Section tabs are 32px tall in the desktop dialog: enough for a mouse, not for
+     a thumb, so they get the same treatment without changing their size. */
+  [role="dialog"] [class*="_navCell"] {
+    position: relative !important;
+  }
+  [role="dialog"] [class*="_navCell"]::after {
+    content: '';
+    position: absolute;
+    inset: -4px -2px;
   }
 }
 `

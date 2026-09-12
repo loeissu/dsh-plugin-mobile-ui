@@ -40,6 +40,7 @@ import { installKeyboardDebug } from './keyboard-debug.ts'
 import { installResumeReconnect } from './connection-recovery.ts'
 import { installConversationChrome } from './conversation-chrome.ts'
 import { installSettingsChrome } from './settings-chrome.ts'
+import { installSettingsSwipe } from './settings-swipe.ts'
 import { installTetherCompat } from './tether-compat.ts'
 import { installTypography } from './typography.ts'
 import { installKeyboardFit } from './viewport.ts'
@@ -133,6 +134,12 @@ export function apply(ctx: ClientContext): void {
   // Touch comfort for the host conversation's 26-34px controls; stylesheet only,
   // and additive like the settings chrome above.
   if (FEATURES.conversationChrome) installConversationChrome()
+
+  // Sideways swipe inside the host settings dialog changes section. Listeners only,
+  // so it is registered as an effect and disposed with the plugin.
+  if (FEATURES.settingsSwipe) {
+    ctx.effect(() => installSettingsSwipe(), 'mobile-ui: settings swipe')
+  }
 
   // The drawer overlay. `shell.overlay` is a `list`, so this is additive: it
   // sits beside the shipped entries rather than competing with any of them, and

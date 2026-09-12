@@ -171,6 +171,22 @@ export const R = {
 } as const
 
 /**
+ * "This is a phone" as a media condition, landscape included.
+ *
+ * Width alone fails the moment the phone is turned sideways: a 915x412 phone is
+ * wider than the 768px gate, so every mobile surface silently switched off (the
+ * drawer, the touch hit layers, the settings density) and the app fell back to the
+ * desktop layout. Height closes that gap — a phone on its side is short — and the
+ * coarse-pointer guard keeps short *desktop* windows out of the landscape branch,
+ * so only a touch device is treated as a phone that way.
+ *
+ * Measured: 412x915 matches on width, 915x412 matches on height + coarse (with
+ * touch emulation on, `(pointer: coarse)` flips exactly as it does on a device),
+ * and a 1600x500 desktop window matches neither.
+ */
+export const PHONE_MEDIA = '(max-width: 768px), (max-height: 520px) and (pointer: coarse)'
+
+/**
  * Spacing scale for the surfaces this plugin draws.
  *
  * Shared so a card and its inner chip cannot disagree about the gutter, and so
