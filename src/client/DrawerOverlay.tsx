@@ -91,6 +91,25 @@ const MARQUEE_MIN_PX = 4
  */
 const DRAG_VAR = '--dsh-mobile-drag-x'
 
+/**
+ * How long a liveness probe may take before the link counts as dead.
+ *
+ * A request that reaches the host answers in single-digit milliseconds on a LAN
+ * (measured: 3ms for this page's shell); four seconds is generous for a phone on
+ * mobile data and still short enough that a tap gets an answer.
+ */
+const LINK_PROBE_TIMEOUT_MS = 4000
+
+/**
+ * Marker the probe looks for in the response.
+ *
+ * `__DSH_BOOT__` is injected by the host into the served HTML, so a response that
+ * carries it came from the PC. Nothing the Tether client's loopback proxy can
+ * synthesise on its own contains it — which is exactly what makes it a tunnel
+ * liveness test rather than a proxy liveness test.
+ */
+const LINK_PROBE_MARK = '__DSH_BOOT__'
+
 const CSS = `
 /* ── the drawer exists only on narrow screens ──────────────────────────────
    HIDDEN BY DEFAULT, enabled by the media query below — not the other way round.
@@ -432,6 +451,14 @@ const CSS = `
     animation: dsh-mobile-conn-pulse ${MOTION.pulse} ease-in-out infinite;
   }
   .dsh-mobile-conn-dot[data-state='disconnected'] { background: ${V.textFaint}; }
+  /* The link is down behind a socket that still connects: filled nothing, ringed
+     in the primary label so it cannot be mistaken for connected (accent, filled)
+     or disconnected (faint, filled). */
+  .dsh-mobile-conn-dot[data-state='dead'] {
+    background: ${V.text};
+    box-shadow: inset 0 0 0 1.5px ${V.surface};
+  }
+  .dsh-mobile-drawer-refresh[data-dead='true'] { color: ${V.text}; }
   @keyframes dsh-mobile-conn-pulse {
     0%, 100% { opacity: 0.4; }
     50% { opacity: 1; }
@@ -874,6 +901,57 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
         : ''
 
   /**
+   * True when the page's own transport is provably dead behind the socket.
+   *
+   * Why this exists: on the phone the app socket's peer is the Tether client's
+   * loopback proxy (`http://127.0.0.1:<port>`, per tether's own CHANGELOG), not the
+   * PC. After the app is backgrounded the P2P tunnel can die while that local proxy
+   * stays up, so `ctx.connection.reconnect()` closes and reopens a socket that
+   * succeeds INSTANTLY against a proxy with nothing behind it: measured, the state
+   * goes connecting -> connected in ~120ms and the dot turns blue while no traffic
+   * reaches the host. Nothing in the client detects that — the connection layer has
+   * no heartbeat (only a 15s first-generation readiness timer), and tether's own
+   * injected script has no connection recovery at all.
+   *
+   * So a manual refresh is followed by a liveness probe: ask for this page and check
+   * that the answer really came from the host. Only then is the reconnect believed.
+   */
+  const [linkDead, setLinkDead] = useState(false)
+
+  /**
+   * Does a request still reach the host?
+   *
+   * The probe fetches this page with `no-store` and looks for markers the host
+   * injects (`__DSH_BOOT__`, the tether rewrite). A loopback proxy with a dead
+   * tunnel cannot produce them — they are added host-side during the response.
+   */
+  const probeLink = useCallback(async (): Promise<boolean> => {
+    if (typeof fetch !== 'function') return true
+    const controller = typeof AbortController === 'undefined' ? null : new AbortController()
+    const timer = controller === null ? undefined : window.setTimeout(() => { controller.abort() }, LINK_PROBE_TIMEOUT_MS)
+    try {
+      const res = await fetch(window.location.href, { cache: 'no-store', signal: controller?.signal })
+      if (!res.ok) return false
+      const body = await res.text()
+      return body.includes(LINK_PROBE_MARK)
+    } catch {
+      return false
+    } finally {
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
+  }, [])
+
+  /** Re-probe whenever the page comes back to the foreground, so the UI is honest. */
+  useEffect(() => {
+    const onVisible = (): void => {
+      if (document.visibilityState !== 'visible') return
+      void probeLink().then((alive) => { setLinkDead(!alive) })
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => { document.removeEventListener('visibilitychange', onVisible) }
+  }, [probeLink])
+
+  /**
    * Refresh is "busy" until the wire confirms the reconnect.
    *
    * Derived from the connection state rather than from a fixed timer: the old
@@ -1293,14 +1371,18 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
             ? <div className="dsh-mobile-drawer-more" data-dsh-mobile-ui="drawer-more" aria-hidden="true" />
             : null}
           {/* The only connection indicator in the mobile UI, so the state is
-              announced as text rather than carried by the dot's colour alone. */}
+              announced as text rather than carried by the dot's colour alone.
+              `dead` is the state the client cannot normally see: the socket is up
+              (to the phone's own proxy) while nothing reaches the host. */}
           <span
             className="dsh-mobile-conn-dot"
             data-dsh-mobile-ui="drawer-conn"
-            data-state={connState ?? 'unknown'}
-            title={connLabel}
+            data-state={linkDead ? 'dead' : connState ?? 'unknown'}
+            title={linkDead ? t.connLinkDead : connLabel}
           >
-            <span className="dsh-mobile-sr-only" role="status" aria-live="polite">{connLabel}</span>
+            <span className="dsh-mobile-sr-only" role="status" aria-live="polite">
+              {linkDead ? t.connLinkDead : connLabel}
+            </span>
           </span>
 
           <button
@@ -1325,13 +1407,22 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
             type="button"
             className="dsh-mobile-drawer-refresh"
             data-dsh-mobile-ui="drawer-refresh"
-            data-busy={reconnecting ? 'true' : 'false'}
-            aria-label={t.drawerRefresh}
+            data-busy={refreshBusy ? 'true' : 'false'}
+            data-dead={linkDead ? 'true' : 'false'}
+            aria-label={linkDead ? t.drawerReload : t.drawerRefresh}
             aria-busy={refreshBusy}
             onClick={() => {
+              // A proven-dead link cannot be fixed by reconnecting: the socket's
+              // peer is the phone's own proxy. Reloading re-runs the handshake the
+              // Tether client needs to rebuild the tunnel behind it.
+              if (linkDead) {
+                window.location.reload()
+                return
+              }
               if (refreshBusy) return
               refreshStartedAt.current = Date.now()
               setReconnecting(true)
+              setLinkDead(false)
               // Official recovery: abort the current attempt and start retry 1.
               // Keeps the drawer open so the user sees the spinner complete.
               props.reconnect?.()
@@ -1343,6 +1434,13 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                 reconnectTimer.current = null
                 setReconnecting(false)
               }, REFRESH_CAP_MS)
+              // ...and then check whether the host is actually reachable, because
+              // the reconnect above only proves the local proxy accepted a socket.
+              void probeLink().then((alive) => {
+                setLinkDead(!alive)
+                const wait = Math.max(0, REFRESH_MIN_MS - (Date.now() - refreshStartedAt.current))
+                window.setTimeout(() => { setReconnecting(false) }, wait)
+              })
             }}
           >
             <svg
@@ -1360,7 +1458,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
               <path d="M14.5 8.2A5.6 5.6 0 1 1 12.4 4" />
               <path d="M12.2 1.8v3.2h3.2" />
             </svg>
-            <span>{refreshBusy ? t.drawerRefreshed : t.drawerRefresh}</span>
+            <span>{refreshBusy ? t.drawerRefreshed : linkDead ? t.drawerReload : t.drawerRefresh}</span>
           </button>
         </div>
       </div>

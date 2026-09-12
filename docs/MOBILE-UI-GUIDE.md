@@ -179,11 +179,15 @@ drawerOverlay: true
 
 | 机制 | 行为 |
 |---|---|
-| 手动刷新 | `ctx.connection.reconnect()`，1.2s busy 转圈 |
-| 自动恢复 | 页面变 visible 且 `state === 'disconnected'` 时 reconnect，2.5s 防抖 |
-| 状态点 | 订阅 `ctx.connection.state` |
+| 手动刷新 | `ctx.connection.reconnect()` → 旧 socket 以 **code 4000 / "reconnect requested"** 关闭、新 socket 立即建立（实测：120ms 内 `connecting → connected`）；busy 最短 700ms、上限 4s，由连接状态派生而不是定时器 |
+| **链路探针** | reconnect 之后用 `fetch(location.href, {cache:'no-store'})` **验证请求真的到达电脑**（响应里必须有宿主注入的 `__DSH_BOOT__`）。4s 超时 |
+| **链路已断（第三态）** | 探针失败 = socket 连着但后面没有隧道 → 状态点变成 `dead`（主标签色圆环 + 文案「链路已断」），按钮变成 **「重新加载」**（点击 `location.reload()`） |
+| 前台回归 | page 变 visible 时**自动跑一次探针**，不需要用户点；`state === 'disconnected'` 时仍会 reconnect（2.5s 防抖） |
+| 状态点 | 订阅 `ctx.connection.state`，四种：蓝填充=已连接 / 蓝脉冲=连接中 / 灰填充=未连接 / 深色圆环=链路已断 |
 
-**场景**：App 切后台后 WebSocket 常半死且不发 `offline`，DSH 自身重连不会跑——自动恢复 + 手动按钮覆盖。
+**为什么需要探针（这是手机上「点了没用」的根因）**：手机上页面的 origin 是 **tether App 内的回环代理** `http://127.0.0.1:<端口>`（tether 自己的 CHANGELOG 写明），所以 app socket 的对端是**手机本机的代理**，不是电脑。App 切后台后真正断掉的是代理背后的 **P2P 隧道**，而 `reconnect()` 换一条到本机代理的 socket 总是**瞬间成功** → 连接状态回到 `connected`、点变蓝，但数据到不了电脑。客户端**检测不到**这种假活：连接层没有心跳（只有 15s 的首代就绪计时），tether 注入的脚本也没有任何连接恢复（实测只有抽屉遮罩、文件查看、设备列表三件事）。
+
+**所以**：假活时点「重新加载」才是对的动作——重新加载会重跑握手，而 tether 客户端在每次页面加载时都会重建隧道（主机日志里每次「手机已开始加载界面」后面都跟着一条新的 `连接路径: P2P 直连(NAT 打洞成功)`）。如果连重新加载也回不来，问题在更外层（Android 客户端的配对/认证，主机 err 日志里能看到 `authentication failed`），需要去 tether 的「主机」页重新配对。
 
 ---
 

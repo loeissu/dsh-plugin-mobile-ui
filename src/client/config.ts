@@ -57,6 +57,18 @@ export interface Copy {
   readonly drawerSettings: string
   readonly drawerRefresh: string
   readonly drawerRefreshed: string
+  /**
+   * Shown instead of the reconnect label when the page's own transport is dead.
+   *
+   * On the phone the app socket's peer is the Tether client's loopback proxy, not
+   * the PC: reconnecting to that proxy always succeeds, so the connection state
+   * claims "connected" while nothing can reach the host. When the liveness probe
+   * proves that, the button stops offering a reconnect (which cannot work) and
+   * offers a reload instead — that re-runs the handshake the Tether client needs
+   * to rebuild its tunnel.
+   */
+  readonly drawerReload: string
+  readonly connLinkDead: string
   readonly drawerNewSession: string
   readonly connConnected: string
   readonly connConnecting: string
@@ -110,10 +122,12 @@ const ZH: Copy = {
   drawerSettings: '设置',
   drawerRefresh: '刷新连接',
   drawerRefreshed: '已刷新',
+  drawerReload: '重新加载',
   drawerNewSession: '新建会话',
   connConnected: '已连接',
   connConnecting: '连接中',
   connDisconnected: '未连接',
+  connLinkDead: '链路已断',
   drawerPlaceholder: '工作区与会话列表将在这里显示。',
   drawerWorkspaces: '工作区',
   drawerSessions: '会话',
@@ -163,10 +177,12 @@ const EN: Copy = {
   drawerSettings: 'Settings',
   drawerRefresh: 'Reconnect',
   drawerRefreshed: 'Refreshed',
+  drawerReload: 'Reload',
   drawerNewSession: 'New session',
   connConnected: 'Connected',
   connConnecting: 'Connecting',
   connDisconnected: 'Disconnected',
+  connLinkDead: 'Link down',
   drawerPlaceholder: 'Workspaces and sessions will appear here.',
   drawerWorkspaces: 'Workspaces',
   drawerSessions: 'Sessions',
