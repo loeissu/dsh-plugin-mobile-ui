@@ -36,7 +36,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SPLASH_TIMING, t } from './config.ts'
-import { accentSoft, injectStyles, TOKEN, V } from './theme.ts'
+import { accentSoft, injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
 
 /**
  * Plugin version, stamped by the bundler define (see `tsdown.config.ts`).
@@ -74,7 +74,7 @@ const CSS = `
      cannot reach the application underneath. */
   pointer-events: auto;
   opacity: 1;
-  transition: opacity var(${TOKEN.duration}, 200ms) var(${TOKEN.ease}, ease);
+  transition: opacity ${MOTION.base} var(${TOKEN.ease}, ease);
 }
 
 .dsh-mobile-splash[data-leaving='true'] {
@@ -90,7 +90,7 @@ const CSS = `
 }
 
 .dsh-mobile-splash__name {
-  font-size: 19px;
+  font-size: ${TYPE.display};
   line-height: 28px;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -99,7 +99,7 @@ const CSS = `
 }
 
 .dsh-mobile-splash__tagline {
-  font-size: 13px;
+  font-size: ${TYPE.bodySm};
   line-height: 20px;
   color: ${V.textFaint};
 }
@@ -113,9 +113,12 @@ const CSS = `
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: ${TYPE.caption};
   line-height: 18px;
   color: ${V.textFaint};
+  /* Status strings carry counts ("约需 9 秒"); tabular digits stop the width
+     jitter as the count changes. */
+  font-variant-numeric: tabular-nums;
   max-width: 78vw;
   text-align: left;
 }
@@ -124,7 +127,7 @@ const CSS = `
   width: 5px;
   height: 5px;
   flex: none;
-  border-radius: 50%;
+  border-radius: ${R.pill};
   /* Paired with corner-shape so the circle keeps circular arcs on engines that
      apply DSH's global superellipse smoothing. */
   corner-shape: round;
@@ -144,6 +147,28 @@ const CSS = `
 `
 
 /* ── module-level dismissal + status control ─────────────────────────────── */
+
+/** sessionStorage key: the boot splash has already been shown this session. */
+const WARM_KEY = 'dsh-mobile-ui/splash-warm'
+
+/**
+ * Whether this mount is a warm start.
+ *
+ * Marks the session on the first (cold) call so every later load — pull-to-
+ * refresh, reopening the PWA, a navigation that remounts the overlay — gets
+ * the short timing. Storage failures (private mode) fall back to cold, which
+ * is the safer long beat.
+ * @returns true when the splash has already been shown this session.
+ */
+function isWarmStart(): boolean {
+  try {
+    if (sessionStorage.getItem(WARM_KEY) === '1') return true
+    sessionStorage.setItem(WARM_KEY, '1')
+  } catch {
+    return false
+  }
+  return false
+}
 
 let requestDismiss: (() => void) | undefined
 let pushStatus: ((text: string) => void) | undefined
@@ -237,8 +262,13 @@ export function Splash({ hold = false }: SplashProps) {
     pushStatus = (text: string) => { setStatus(text) }
 
     // A held splash installs no timers: the reader closes it.
-    const minTimer = hold ? 0 : window.setTimeout(beginFade, SPLASH_TIMING.minVisibleMs)
-    const maxTimer = hold ? 0 : window.setTimeout(beginFade, SPLASH_TIMING.maxVisibleMs)
+    // Warm starts (sessionStorage already marked) use the short pair so a
+    // refresh does not sit through the brand beat again.
+    const warm = !hold && isWarmStart()
+    const minMs = warm ? SPLASH_TIMING.minVisibleWarmMs : SPLASH_TIMING.minVisibleMs
+    const maxMs = warm ? SPLASH_TIMING.maxVisibleWarmMs : SPLASH_TIMING.maxVisibleMs
+    const minTimer = hold ? 0 : window.setTimeout(beginFade, minMs)
+    const maxTimer = hold ? 0 : window.setTimeout(beginFade, maxMs)
 
     return () => {
       window.clearTimeout(minTimer)

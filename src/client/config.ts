@@ -36,10 +36,7 @@ export interface Copy {
   readonly toolFailed: string
   readonly toolNoOutput: string
   readonly toolTruncated: string
-  readonly drawerTitle: string
   readonly drawerHosts: string
-  readonly drawerSessions: string
-  readonly drawerClose: string
   readonly settingsLabel: string
   readonly settingsHeading: string
   readonly settingsConnection: string
@@ -57,6 +54,13 @@ export interface Copy {
   readonly drawerOpen: string
   readonly drawerTitle: string
   readonly drawerClose: string
+  readonly drawerSettings: string
+  readonly drawerRefresh: string
+  readonly drawerRefreshed: string
+  readonly drawerNewSession: string
+  readonly connConnected: string
+  readonly connConnecting: string
+  readonly connDisconnected: string
   readonly drawerPlaceholder: string
   readonly drawerWorkspaces: string
   readonly drawerSessions: string
@@ -85,10 +89,7 @@ const ZH: Copy = {
   toolFailed: '失败',
   toolNoOutput: '（没有输出）',
   toolTruncated: '已截断',
-  drawerTitle: '导航',
   drawerHosts: '我的电脑',
-  drawerSessions: '会话',
-  drawerClose: '关闭',
   settingsLabel: '移动端',
   settingsHeading: '移动端界面',
   settingsConnection: '连接',
@@ -106,6 +107,13 @@ const ZH: Copy = {
   drawerOpen: '展开导航',
   drawerTitle: '导航',
   drawerClose: '关闭',
+  drawerSettings: '设置',
+  drawerRefresh: '刷新连接',
+  drawerRefreshed: '已刷新',
+  drawerNewSession: '新建会话',
+  connConnected: '已连接',
+  connConnecting: '连接中',
+  connDisconnected: '未连接',
   drawerPlaceholder: '工作区与会话列表将在这里显示。',
   drawerWorkspaces: '工作区',
   drawerSessions: '会话',
@@ -134,10 +142,7 @@ const EN: Copy = {
   toolFailed: 'Failed',
   toolNoOutput: '(no output)',
   toolTruncated: 'truncated',
-  drawerTitle: 'Navigation',
   drawerHosts: 'My computers',
-  drawerSessions: 'Sessions',
-  drawerClose: 'Close',
   settingsLabel: 'Mobile',
   settingsHeading: 'Mobile interface',
   settingsConnection: 'Connection',
@@ -155,6 +160,13 @@ const EN: Copy = {
   drawerOpen: 'Expand navigation',
   drawerTitle: 'Navigation',
   drawerClose: 'Close',
+  drawerSettings: 'Settings',
+  drawerRefresh: 'Reconnect',
+  drawerRefreshed: 'Refreshed',
+  drawerNewSession: 'New session',
+  connConnected: 'Connected',
+  connConnecting: 'Connecting',
+  connDisconnected: 'Disconnected',
   drawerPlaceholder: 'Workspaces and sessions will appear here.',
   drawerWorkspaces: 'Workspaces',
   drawerSessions: 'Sessions',
@@ -221,6 +233,28 @@ export const FEATURES = {
    */
   tetherCompat: true,
   /**
+   * Force a Host reconnect when the page returns to the foreground while the
+   * wire is not connected.
+   *
+   * Backgrounding the Tether shell often leaves the WebSocket half-dead
+   * without a clean `offline` event, so DSH's own reconnect loop never runs.
+   * Listening for `visibilitychange` / `pageshow` and calling
+   * `ctx.connection.reconnect()` only when state is `disconnected` keeps the
+   * recovery automatic; the drawer's manual refresh stays as a fallback.
+   *
+   * Touches no slot: listeners only, disposed with the plugin.
+   * See `src/client/connection-recovery.ts`.
+   */
+  resumeReconnect: true,
+  /**
+   * Shared typography for the plugin's own surfaces: opt out of Android
+   * WebView font boosting, tabular figures on numeric text, a line-height
+   * floor, and no stock tap flash. A stylesheet only, scoped to
+   * `[data-dsh-mobile-ui]`, so no host text outside this plugin is touched.
+   * See `src/client/typography.ts`.
+   */
+  typography: true,
+  /**
    * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
    * can work at all: the live viewport heights, the smallest visual-viewport
    * height seen since load, and event counters.
@@ -231,10 +265,11 @@ export const FEATURES = {
    * self-consistent, not that the assumption holds — so the desktop suite was
    * green while the phone stayed broken.
    *
-   * Turn this off once the device behaviour is known. See
-   * `src/client/keyboard-debug.ts`.
+   * Off by default: the badge sat over the floating drawer trigger at phone
+   * width and made navigation look broken. Enable only while collecting a
+   * keyboard screenshot. See `src/client/keyboard-debug.ts`.
    */
-  keyboardDebug: true,
+  keyboardDebug: false,
   /**
    * Tool names whose shipped card this plugin replaces in
    * `tool.call.toolview`. A key the shipped composition already covers is
@@ -275,13 +310,21 @@ export const FEATURES = {
 
 /** Timing for the splash, in milliseconds. */
 export const SPLASH_TIMING = {
-  /** Minimum visible time before the fade starts. */
+  /** Minimum visible time on a cold start before the fade starts. */
   minVisibleMs: 700,
-  /** Fade duration; must match the `--dsh-mobile-splash-fade` transition. */
+  /**
+   * Minimum visible time on a warm start (same browser session already showed
+   * the splash). Refreshing or returning from a deep link should not pay the
+   * full brand beat again.
+   */
+  minVisibleWarmMs: 120,
+  /** Fade duration; must match the splash opacity transition. */
   fadeMs: 200,
   /**
-   * Hard safety cap. The splash always dismisses by this point even if the
-   * readiness signal never arrives, so it can never trap the user.
+   * Hard safety cap on a cold start. The splash always dismisses by this point
+   * even if the readiness signal never arrives, so it can never trap the user.
    */
   maxVisibleMs: 4000,
+  /** Cap on a warm start — short enough to feel like a blink, not a wait. */
+  maxVisibleWarmMs: 900,
 } as const

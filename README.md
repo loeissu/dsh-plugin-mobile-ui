@@ -4,7 +4,13 @@
 
 [English](README.en.md) · 中文
 
-> **状态：可运行的最小验证产物。** 已实现并通过验证的是**启动页**与**设置页**两个加法式表面；**工具卡片**与**抽屉**已完整实现且证明可渲染，但默认关闭（它们是替换式插槽，见[可选的替换式表面](#可选的替换式表面)）。
+> **状态（2026-09-12）：手机端可用。** 手机上以顶栏**「导航」**文字打开浮层抽屉，做会话切换、设置、重连；**启动页**、**移动端设置页**、**5 张工具卡**（替换式）默认开启；侧栏整体接管（`sidebar` single 插槽）**已放弃并默认关闭**，代码保留在 `Drawer.tsx`。
+>
+> - 当前实现与真机操作一览：**[`docs/MOBILE-UI-GUIDE.md`](docs/MOBILE-UI-GUIDE.md)** ← 建议先读这一份
+> - 逐场修改日志：**[`docs/2026-09-11-session-log.md`](docs/2026-09-11-session-log.md)**
+> - 键盘「首次不弹 / 时好时坏」的根因在 Tauri 壳（缺 `windowSoftInputMode`），客户端只能缓解，根治需重编 APK —— 见 [键盘 / 输入框](docs/MOBILE-UI-GUIDE.md#7-键盘--输入框重要)
+>
+> 下文（含「可选的替换式表面」「版本兼容性」）描述的是本 README 写作时的较早状态，凡与 `docs/MOBILE-UI-GUIDE.md` 冲突处，以该文档为准。
 
 ---
 
@@ -558,19 +564,34 @@ dsh-plugin-mobile-ui/
 ├── src/
 │   ├── index.ts            # Node 半边：空 apply
 │   └── client/
-│       ├── index.tsx       # apply：四个表面的注册（全部 inject 包裹）
-│       ├── config.ts       # 功能开关 + 全部用户可见文案（zh/en）
-│       ├── theme.ts        # token 读取与映射，不硬编码颜色
-│       ├── Splash.tsx      # 启动页 → shell.overlay
-│       ├── Settings.tsx    # 设置页 → settings.section
-│       ├── ToolCard.tsx    # 工具卡片 → tool.call.toolview（默认关闭）
-│       └── Drawer.tsx      # 抽屉 → sidebar（默认关闭）
+│       ├── index.tsx       # apply：注册全部表面（每处都包在 slots.inject 里）
+│       ├── config.ts       # FEATURES 功能开关 + 全部用户可见文案（zh/en）
+│       ├── theme.ts        # TYPE / R / MOTION token 与 injectStyles，不硬编码颜色
+│       ├── typography.ts   # 移动端排版基线（字体放大、行高、去点按闪灰）
+│       ├── Splash.tsx      # 启动页 → shell.overlay（冷/热启动两套时长）
+│       ├── Settings.tsx    # 「移动端」设置页 → settings.section
+│       ├── ToolCard.tsx    # 工具卡片 → tool.call.toolview（默认 5 个工具）
+│       ├── DrawerOverlay.tsx  # 浮层抽屉（主交互）→ shell.overlay
+│       ├── Drawer.tsx      # 侧栏接管 → sidebar（已放弃，默认关闭，代码保留）
+│       ├── viewport.ts     # 键盘适配（visualViewport 缩 frame，缓解非根治）
+│       ├── tether-compat.ts   # 反制 dsh-tether 过宽的 `_row` 选择器
+│       ├── settings-chrome.ts # 主机设置弹层窄屏排版
+│       ├── connection-recovery.ts # 回前台自动重连
+│       └── keyboard-debug.ts  # 键盘诊断徽章（临时，默认关）
 ├── lib/                    # 构建产物，不入版本库（npm run bundle 生成）
+├── tools/                  # CDP 探针（probe-*.mjs）与验收脚本（verify-*.mjs）
 └── docs/
+    ├── MOBILE-UI-GUIDE.md           # 当前实现总说明（先读这份）
+    ├── 00-项目说明.md                # 项目背景与范围
+    ├── 2026-09-11-session-log.md    # 逐场修改日志（含 P0/P1 清单）
+    ├── 2026-09-12-typography.md     # 排版基线调查
+    ├── 2026-09-12-overlap-audit.md  # 重叠 / 遮挡审计
     ├── plan.md                      # 设计说明：插槽映射、组件职责、取舍
     ├── 01-final-plan.md             # 最终方案：版本策略、插槽对照、路线图、风险
     ├── 02-theme-token-mapping.md    # 配色 token 映射表（带 file:line 出处）
     ├── 03-tether-0.1.5-bump-report.md  # tether 升级兼容性与 flock 阻塞证据
+    ├── keyboard-occlusion.md        # 键盘遮挡诊断与缓解
+    ├── android-native-splash.md     # 原生启动屏（阻塞：本机缺 MSVC）
     └── tools/
         └── slot-diff.ps1            # 两版本插槽对照脚本
 ```
@@ -581,9 +602,13 @@ dsh-plugin-mobile-ui/
 
 | 文档 | 内容 |
 |---|---|
+| [`docs/MOBILE-UI-GUIDE.md`](docs/MOBILE-UI-GUIDE.md) | **当前实现总说明。** 表面/插槽对照、抽屉交互、设计 token、连接恢复、键盘根因、验证清单、运行实例 |
+| [`docs/2026-09-11-session-log.md`](docs/2026-09-11-session-log.md) | 逐项修改日志：修了哪些 bug、每批验收结果、未完成项 |
+| [`docs/00-项目说明.md`](docs/00-项目说明.md) | 项目背景、范围与硬约束 |
 | [`docs/01-final-plan.md`](docs/01-final-plan.md) | **主报告。** 结论摘要、版本策略、完整插槽对照表、插件设计、五阶段实施路线图、12 项风险与降级、已验证清单、8 项待确认问题 |
 | [`docs/02-theme-token-mapping.md`](docs/02-theme-token-mapping.md) | 原型硬编码配色 → DSH 语义 token 的完整映射，每个 token 带源码 file:line。含「无对应 token」的明确清单 |
 | [`docs/03-tether-0.1.5-bump-report.md`](docs/03-tether-0.1.5-bump-report.md) | dsh-tether 升级 0.1.5 的完整兼容性分析，含 `flock` 阻塞链、wire 协议版本性、Android 构建面 |
+| [`docs/keyboard-occlusion.md`](docs/keyboard-occlusion.md) | 键盘遮挡现象的实测诊断，以及为什么客户端修不掉 |
 | [`docs/tools/slot-diff.ps1`](docs/tools/slot-diff.ps1) | 对两棵安装树机械提取并比对 `SlotMap` 声明。用法见脚本头注释 |
 
 ---

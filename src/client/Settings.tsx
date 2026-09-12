@@ -17,8 +17,8 @@
  */
 import { useEffect, useState } from 'react'
 import { FEATURES, t } from './config.ts'
-import { dismissSplash, replaySplash, setSplashStatus } from './Splash.tsx'
-import { accentSoft, injectStyles, isDarkTheme, observeTheme, TOKEN, V } from './theme.ts'
+import { replaySplash, setSplashStatus } from './Splash.tsx'
+import { accentSoft, injectStyles, isDarkTheme, MOTION, observeTheme, R, TOKEN, TYPE, V } from './theme.ts'
 
 const STYLE_ID = 'settings'
 
@@ -26,13 +26,13 @@ const CSS = `
 .dsh-mobile-settings {
   display: flex;
   flex-direction: column;
-  gap: 26px;
-  font-size: 14px;
+  gap: 20px;
+  font-size: ${TYPE.body};
   color: ${V.text};
 }
 
 .dsh-mobile-settings__heading {
-  font-size: 11px;
+  font-size: ${TYPE.micro};
   line-height: 16px;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -44,17 +44,17 @@ const CSS = `
 .dsh-mobile-settings__card {
   background: ${V.surface};
   border: 0.5px solid ${V.border};
-  border-radius: 16px;
+  border-radius: ${R.xl};
   overflow: hidden;
 }
 
 .dsh-mobile-settings__row {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   /* >=44px keeps every row inside the touch target minimum. */
   min-height: 44px;
-  padding: 13px 16px;
+  padding: 11px 14px;
   border-bottom: 0.5px solid ${V.border};
 }
 
@@ -63,12 +63,12 @@ const CSS = `
 .dsh-mobile-settings__label {
   flex: 1;
   min-width: 0;
-  font-size: 14px;
+  font-size: ${TYPE.body};
   line-height: 1.5;
 }
 
 .dsh-mobile-settings__value {
-  font-size: 13px;
+  font-size: ${TYPE.bodySm};
   color: ${V.textFaint};
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -82,14 +82,14 @@ const CSS = `
   flex: none;
   width: 42px;
   height: 25px;
-  border-radius: 13px;
+  border-radius: ${R.pill};
   corner-shape: round;
   border: 0;
   padding: 0;
   background: ${V.border};
   position: relative;
   cursor: pointer;
-  transition: background ${'var(' + TOKEN.duration + ', 200ms)'} ${'var(' + TOKEN.ease + ', ease)'};
+  transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
 }
 
 .dsh-mobile-settings__switch[data-on='true'] { background: ${V.accent}; }
@@ -101,10 +101,10 @@ const CSS = `
   left: 2.5px;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: ${R.pill};
   corner-shape: round;
   background: ${V.bg};
-  transition: transform 220ms ${'cubic-bezier(.4,0,.2,1)'};
+  transition: transform ${MOTION.sheet} ${MOTION.ease};
 }
 
 .dsh-mobile-settings__switch[data-on='true']::after { transform: translateX(17px); }
@@ -112,13 +112,15 @@ const CSS = `
 .dsh-mobile-settings__action {
   flex: none;
   font: inherit;
-  font-size: 12px;
+  font-size: ${TYPE.caption};
+  font-weight: 500;
   padding: 5px 12px;
-  border-radius: 14px;
+  border-radius: ${R.lg};
   border: 0.5px solid ${V.border};
   background: transparent;
   color: inherit;
   cursor: pointer;
+  transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
 }
 
 .dsh-mobile-settings__action:active { background: ${V.active}; }
@@ -132,16 +134,19 @@ const CSS = `
 .dsh-mobile-settings__chip {
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: ${R.pill};
   corner-shape: round;
   border: 0.5px solid ${V.border};
 }
 
 .dsh-mobile-settings__note {
-  font-size: 12px;
+  font-size: ${TYPE.caption};
   line-height: 1.7;
   color: ${V.textFaint};
   padding: 0 4px;
+  /* Avoids a lone dangling character on the last wrapped line, which CJK
+     footnotes produce easily at this measure. */
+  text-wrap: pretty;
 }
 
 .dsh-mobile-settings__accent { color: ${V.accent}; }
@@ -176,7 +181,6 @@ export function SettingsSection(_props: SettingsSectionProps) {
   injectStyles(STYLE_ID, CSS)
 
   const [dark, setDark] = useState<boolean>(() => isDarkTheme())
-  const [expandCards, setExpandCards] = useState<boolean>(false)
 
   useEffect(() => observeTheme(setDark), [])
 

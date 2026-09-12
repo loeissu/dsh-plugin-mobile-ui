@@ -38,8 +38,8 @@
  * a minimal row rather than throwing. DSH's own convention is the same:
  * "Unknown or malformed tool data falls back to the generic form."
  */
-import { useState } from 'react'
-import { accentSoft, injectStyles, TOKEN, V } from './theme.ts'
+import { useEffect, useState } from 'react'
+import { accentSoft, injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
 import { t } from './config.ts'
 
 /** A settled tool result, as much of it as this card reads. */
@@ -80,7 +80,7 @@ const STYLE_ID = 'tool-card'
 const CSS = `
 .dsh-mobile-tool {
   border: 0.5px solid ${V.border};
-  border-radius: 14px;
+  border-radius: ${R.lg};
   background: ${V.surface};
   overflow: hidden;
 }
@@ -112,11 +112,14 @@ const CSS = `
   place-items: center;
   color: ${V.textFaint};
 }
+.dsh-mobile-tool__head:has(.dsh-mobile-tool__error) .dsh-mobile-tool__ico {
+  color: ${V.accent};
+}
 
 .dsh-mobile-tool__label {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
+  font-size: ${TYPE.bodySm};
   line-height: 1.4;
   color: ${V.textDim};
   overflow: hidden;
@@ -126,20 +129,20 @@ const CSS = `
 
 .dsh-mobile-tool__detail {
   font-family: ${V.mono};
-  font-size: 12px;
+  font-size: ${TYPE.caption};
   color: ${V.accent};
   background: ${accentSoft()};
   padding: 1.5px 6px;
-  border-radius: 5px;
+  border-radius: ${R.xs};
 }
 
 .dsh-mobile-tool__count {
   flex: none;
-  font-size: 11px;
+  font-size: ${TYPE.micro};
   line-height: 16px;
   color: ${V.textFaint};
   background: ${V.hover};
-  border-radius: 9px;
+  border-radius: ${R.sm};
   padding: 1px 7px;
   font-variant-numeric: tabular-nums;
 }
@@ -149,7 +152,7 @@ const CSS = `
 .dsh-mobile-tool__chev {
   flex: none;
   color: ${V.textFaint};
-  transition: transform var(${TOKEN.duration}, 200ms) var(${TOKEN.ease}, ease);
+  transition: transform ${MOTION.base} var(${TOKEN.ease}, ease);
 }
 
 .dsh-mobile-tool[data-open='true'] .dsh-mobile-tool__chev { transform: rotate(180deg); }
@@ -159,7 +162,7 @@ const CSS = `
 .dsh-mobile-tool__body {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows 280ms ${'cubic-bezier(.4,0,.2,1)'};
+  transition: grid-template-rows ${MOTION.expand} ${MOTION.ease};
   border-top: 0.5px solid transparent;
 }
 
@@ -174,8 +177,11 @@ const CSS = `
   margin: 0;
   padding: 13px 15px;
   font-family: ${V.mono};
-  font-size: 12px;
+  font-size: ${TYPE.caption};
   line-height: 1.65;
+  /* Tool output is read as code: ligature substitution can fuse characters
+     that the user needs to copy verbatim. */
+  font-variant-ligatures: none;
   color: ${V.textDim};
   background: ${V.bg};
   white-space: pre;
@@ -363,6 +369,13 @@ export function ToolCard(props: ToolCardProps) {
   const subCalls = isSettled(props.block) ? props.block.subCalls : (props.block as RunningBlock).subCalls
   const subCount = Array.isArray(subCalls) ? subCalls.length : 0
 
+  // Failures open by default: on a phone the reader needs the error body
+  // without a second tap. A later collapse is respected until the block
+  // becomes non-failed (or a new failure arrives).
+  useEffect(() => {
+    if (failed) setOpen(true)
+  }, [failed])
+
   const detail = summarize(blockArgs(props.block), props.cwd, props.home)
   const verb = settled ? (failed ? t.toolFailed : t.toolRan) : t.toolRunning
 
@@ -375,10 +388,17 @@ export function ToolCard(props: ToolCardProps) {
         onClick={() => { setOpen((value) => !value) }}
       >
         <span className="dsh-mobile-tool__ico" aria-hidden="true">
-          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4.5 5.5L7 8l-2.5 2.5M8.5 10.5h3" />
-            <rect x="1.5" y="2" width="13" height="12" rx="2.5" />
-          </svg>
+          {failed ? (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 2.5 1.8 13.5h12.4L8 2.5Z" />
+              <path d="M8 6.5v3.2M8 11.8v.2" />
+            </svg>
+          ) : (
+            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4.5 5.5L7 8l-2.5 2.5M8.5 10.5h3" />
+              <rect x="1.5" y="2" width="13" height="12" rx="2.5" />
+            </svg>
+          )}
         </span>
 
         <span className={'dsh-mobile-tool__label' + (failed ? ' dsh-mobile-tool__error' : '')}>

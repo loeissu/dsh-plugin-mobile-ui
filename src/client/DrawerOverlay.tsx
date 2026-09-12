@@ -55,9 +55,10 @@
  * interception, not something a page can claim.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from './config.ts'
-import { injectStyles, TOKEN, V } from './theme.ts'
+import { injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
 
 const STYLE_ID = 'drawer'
 
@@ -112,10 +113,29 @@ const CSS = `
    They currently rely on auto-placement, which is exactly what breaks.
 
    Selectors are narrowed to the AppFrame: a bare [class*="_frame"] matches two
-   elements (AppFrame plus one inside ui-chat). */
+   elements (AppFrame plus one inside ui-chat).
+
+   The column is PARKED off-viewport, not display:none. ui-settings renders
+   its modal inside the sidebar.settings seat (no body portal). A display:none
+   ancestor unpaints that modal entirely, so Settings opened from the hidden
+   rail was a no-op — confirmed: dialog present, 0×0, inside sidebarCol.
+   Parking keeps the subtree painted; position:fixed children still resolve
+   against the viewport and appear on screen. pointer-events:none keeps the
+   parked rail from eating taps; the dialog overlay opts back in. */
 @media ${NARROW} {
   [data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"] {
-    display: none !important;
+    display: block !important;
+    position: fixed !important;
+    left: -10000px !important;
+    top: 0 !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: visible !important;
+    pointer-events: none !important;
+  }
+  [data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"] [role="dialog"],
+  [data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"] [class*="_overlay"] {
+    pointer-events: auto !important;
   }
   [data-slot="root"] > [class*="_frame"] {
     grid-template-columns: minmax(0, 1fr) 0px !important;
@@ -146,37 +166,53 @@ const CSS = `
     height: var(--dsh-mobile-vv-height, 100%);
     z-index: 2147482000;
     pointer-events: none;
-    font-size: 14px;
+    font-size: ${TYPE.body};
     color: ${V.text};
   }
 
-  .dsh-mobile-drawer-trigger {
+  /* Primary open control: a text tab matching 对话 / 轨迹, sitting left of
+     that tablist. The host tablist is padded so the three read as one row. */
+  .dsh-mobile-nav-tab {
     position: absolute;
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-    left: 8px;
-    width: 40px;
-    height: 40px;
-    display: grid;
-    place-items: center;
-    padding: 0;
+    /* Aligns with the host tablist (measured top≈50px at phone width). */
+    top: 50px;
+    left: 20px;
+    display: block;
+    height: 25px;
+    padding: 0 0 9px;
     border: 0;
-    border-radius: 13px;
-    corner-shape: round;
-    background: ${V.surface};
-    color: ${V.text};
-    box-shadow: var(--dsw-elevation-panel, 0 2px 8px rgba(0, 0, 0, 0.14));
-    pointer-events: auto;
+    background: transparent;
+    font: inherit;
+    font-size: ${TYPE.bodySm};
+    font-weight: 500;
+    line-height: 16px;
+    color: ${V.textDim};
     cursor: pointer;
+    pointer-events: auto;
+    z-index: 2;
+    transition: color ${MOTION.base} var(${TOKEN.ease}, ease);
   }
-  .dsh-mobile-drawer-trigger:active { background: ${V.active}; }
+  .dsh-mobile-nav-tab:active { color: ${V.accent}; }
+  .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-nav-tab {
+    opacity: 0;
+    pointer-events: none;
+  }
 
+  /* Make room in the host tablist so 导航 sits before 对话. */
+  @media ${NARROW} {
+    [class*="_tabs"][role="tablist"] {
+      padding-left: 56px !important;
+    }
+  }
+
+  /* Full-viewport scrim (overlay mode). */
   .dsh-mobile-drawer-scrim {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
     opacity: 0;
     pointer-events: none;
-    transition: opacity var(${TOKEN.duration}, 200ms) var(${TOKEN.ease}, ease);
+    transition: opacity ${MOTION.base} var(${TOKEN.ease}, ease);
   }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-drawer-scrim {
     opacity: 1;
@@ -188,26 +224,27 @@ const CSS = `
     top: 0;
     bottom: 0;
     left: 0;
-    /* Narrower than the prototype's 80%: on a phone a full-height panel at 80%
-       leaves a strip too small to aim at, and the drawer is dismissed by
-       tapping the scrim. min() keeps the strip on small viewports while
-       capping the panel on wide ones. */
     width: min(72%, 300px);
     display: flex;
     flex-direction: column;
     background: ${V.surface};
     color: ${V.text};
     border-right: 0.5px solid ${V.border};
-    border-radius: 0 30px 30px 0;
+    border-radius: 0 ${R.panel} ${R.panel} 0;
     box-shadow: 0 10px 36px rgba(0, 0, 0, 0.24);
     transform: translateX(-100%);
     pointer-events: none;
-    transition: transform 220ms ${'cubic-bezier(.4,0,.2,1)'};
+    transition: transform ${MOTION.sheet} ${MOTION.ease};
     padding-top: env(safe-area-inset-top, 0px);
   }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-drawer-panel {
     transform: translateX(0);
     pointer-events: auto;
+  }
+  /* Follow the finger 1:1 while swiping; the close/open transitions would
+     smear the drag into a lag. */
+  .dsh-mobile-drawer-panel[data-dragging='true'] {
+    transition: none !important;
   }
 
   .dsh-mobile-drawer-head {
@@ -221,7 +258,7 @@ const CSS = `
   .dsh-mobile-drawer-title {
     flex: 1;
     min-width: 0;
-    font-size: 15px;
+    font-size: ${TYPE.bodyLg};
     font-weight: 600;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -235,13 +272,122 @@ const CSS = `
     place-items: center;
     padding: 0;
     border: 0;
-    border-radius: 11px;
+    border-radius: ${R.sm};
     corner-shape: round;
     background: transparent;
     color: ${V.textDim};
     cursor: pointer;
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
   }
   .dsh-mobile-drawer-close:active { background: ${V.active}; }
+
+  .dsh-mobile-drawer-new {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: ${R.sm};
+    corner-shape: round;
+    background: transparent;
+    color: ${V.accent};
+    cursor: pointer;
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+  }
+  .dsh-mobile-drawer-new:active { background: ${V.active}; }
+
+  .dsh-mobile-drawer-foot {
+    flex: none;
+    position: relative;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 52px;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    border-top: 0.5px solid ${V.border};
+    background: ${V.surface};
+  }
+  .dsh-mobile-drawer-settings {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 44px;
+    padding: 8px 10px;
+    border: 0;
+    border-radius: ${R.md};
+    background: transparent;
+    color: ${V.textDim};
+    font: inherit;
+    font-size: ${TYPE.body};
+    text-align: left;
+    cursor: pointer;
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+  }
+  .dsh-mobile-drawer-settings:active { background: ${V.active}; }
+
+  .dsh-mobile-drawer-refresh {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px 12px;
+    margin-left: 4px;
+    border: 0;
+    border-radius: ${R.md};
+    background: transparent;
+    color: ${V.textDim};
+    font: inherit;
+    font-size: ${TYPE.bodySm};
+    cursor: pointer;
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ease),
+                color ${MOTION.base} var(${TOKEN.ease}, ease);
+  }
+  .dsh-mobile-drawer-refresh:active { background: ${V.active}; }
+  .dsh-mobile-drawer-refresh[data-busy='true'] {
+    color: ${V.accent};
+    pointer-events: none;
+  }
+  .dsh-mobile-drawer-refresh[data-busy='true'] .dsh-mobile-drawer-refresh__ico {
+    animation: dsh-mobile-spin 0.9s linear infinite;
+  }
+  @keyframes dsh-mobile-spin {
+    to { transform: rotate(360deg); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dsh-mobile-drawer-refresh[data-busy='true'] .dsh-mobile-drawer-refresh__ico {
+      animation: none;
+    }
+  }
+
+  .dsh-mobile-conn-dot {
+    flex: none;
+    width: 8px;
+    height: 8px;
+    border-radius: ${R.pill};
+    corner-shape: round;
+    background: ${V.textFaint};
+  }
+  .dsh-mobile-conn-dot[data-state='connected'] { background: ${V.accent}; }
+  .dsh-mobile-conn-dot[data-state='connecting'] {
+    background: ${V.accent};
+    opacity: 0.55;
+    animation: dsh-mobile-conn-pulse 1.2s ease-in-out infinite;
+  }
+  .dsh-mobile-conn-dot[data-state='disconnected'] { background: ${V.textFaint}; }
+  @keyframes dsh-mobile-conn-pulse {
+    0%, 100% { opacity: 0.35; }
+    50% { opacity: 1; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dsh-mobile-conn-dot[data-state='connecting'] { animation: none; opacity: 0.7; }
+  }
 
   .dsh-mobile-drawer-body {
     flex: 1;
@@ -270,7 +416,7 @@ const CSS = `
     z-index: 1;
     pointer-events: none;
     background: ${V.surface};
-    font-size: 11px;
+    font-size: ${TYPE.micro};
     letter-spacing: 0.04em;
     text-transform: uppercase;
     font-weight: 600;
@@ -310,6 +456,11 @@ const CSS = `
     font: inherit;
     text-align: left;
     cursor: pointer;
+    /* Skip layout/paint for off-screen rows. Chromium/Android WebView support
+       this; contain-intrinsic-size keeps the scrollbar honest without JS
+       virtualization (and without breaking sticky labels). */
+    content-visibility: auto;
+    contain-intrinsic-size: auto 52px;
   }
   .dsh-mobile-ws:active { background: ${V.active}; }
   .dsh-mobile-ws[data-active='true'] { background: ${V.hover}; }
@@ -317,7 +468,7 @@ const CSS = `
     flex: none;
     width: 7px;
     height: 7px;
-    border-radius: 50%;
+    border-radius: ${R.pill};
     corner-shape: round;
     background: transparent;
     border: 1.5px solid ${V.textFaint};
@@ -328,13 +479,13 @@ const CSS = `
   }
   .dsh-mobile-ws-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .dsh-mobile-ws-name {
-    font-size: 14px;
+    font-size: ${TYPE.body};
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .dsh-mobile-ws-path {
-    font-size: 11px;
+    font-size: ${TYPE.micro};
     color: ${V.textFaint};
     overflow: hidden;
     text-overflow: ellipsis;
@@ -342,7 +493,7 @@ const CSS = `
   }
   .dsh-mobile-ws-count {
     flex: none;
-    font-size: 11px;
+    font-size: ${TYPE.micro};
     color: ${V.textFaint};
     font-variant-numeric: tabular-nums;
   }
@@ -361,6 +512,8 @@ const CSS = `
     font: inherit;
     text-align: left;
     cursor: pointer;
+    content-visibility: auto;
+    contain-intrinsic-size: auto 56px;
   }
   .dsh-mobile-sess:active { background: ${V.active}; }
   .dsh-mobile-sess[data-active='true'] { background: ${V.hover}; }
@@ -388,8 +541,8 @@ const CSS = `
    * and a flex item is blockified. */
   .dsh-mobile-sess-title {
     display: block;
-    font-size: 14px;
-    line-height: 1.4;
+    font-size: ${TYPE.body};
+    line-height: 1.45;
     overflow: hidden;
     white-space: nowrap;
     color: ${V.textDim};
@@ -428,23 +581,25 @@ const CSS = `
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11.5px;
+    font-size: ${TYPE.caption};
     color: ${V.textFaint};
     margin-top: 3px;
+    /* Ages tick; tabular digits keep the row from wiggling. */
+    font-variant-numeric: tabular-nums;
   }
   .dsh-mobile-sess-state {
     flex: none;
     width: 6px;
     height: 6px;
-    border-radius: 50%;
+    border-radius: ${R.pill};
     corner-shape: round;
   }
   .dsh-mobile-sess-state[data-state='running'] { background: ${V.accent}; }
-  .dsh-mobile-sess-state[data-state='done'] { background: #34d399; }
+  .dsh-mobile-sess-state[data-state='done'] { background: ${V.accent}; opacity: 0.55; }
 
   .dsh-mobile-drawer-empty {
     padding: 18px 16px;
-    font-size: 12.5px;
+    font-size: ${TYPE.caption};
     line-height: 1.7;
     color: ${V.textFaint};
   }
@@ -507,6 +662,17 @@ export interface DrawerOverlayProps {
   readonly openSession: (sessionId: string) => void
   /** Connect a workspace and open its session. */
   readonly openWorkspace: (workspaceId: string) => void
+  /** Start a New Session in the current / most recent workspace. */
+  readonly startSession?: () => void
+  /**
+   * Force an immediate Host reconnect. Surfaces after the app is backgrounded
+   * and the wire goes stale without a clean offline event.
+   */
+  readonly reconnect?: () => void
+  /** Subscribe to Host connection-state changes; returns unsubscribe. */
+  readonly subscribeConnection?: (cb: () => void) => () => void
+  /** Current Host wire state: connected | connecting | disconnected. */
+  readonly getConnectionState?: () => string | undefined
 }
 
 /** A time bucket for the secondary grouping. */
@@ -546,6 +712,40 @@ function ageLabel(updatedAt: number, now: number): string {
 }
 
 /**
+ * Redact GitHub PAT-shaped tokens in a display title.
+ *
+ * Session titles are user data, and a title that is a token leaks it into
+ * every screenshot of the drawer. Display-only: the underlying title is
+ * untouched, so rename/open still work. Pattern matches classic `ghp_`/`gho_`
+ * tokens and the newer `github_pat_` fine-grained form.
+ */
+function redactSecrets(title: string): string {
+  return title
+    .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}/g, (m) => `${m.slice(0, 7)}…${m.slice(-4)}`)
+    .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}/g, (m) => `${m.slice(0, 12)}…${m.slice(-4)}`)
+}
+
+/**
+ * Open DSH's settings by activating the shipped sidebar trigger.
+ *
+ * ui-settings renders its modal inside the `sidebar.settings` seat — no body
+ * portal — so the only public entry is that row's button. The rail is parked
+ * off-viewport (still painted), which is what lets the modal show once opened.
+ */
+function openHostSettings(): boolean {
+  const seat = document.querySelector('[data-slot="sidebar.settings"]')
+  const btn = (seat?.querySelector('button') ?? null)
+    ?? document.querySelector('[data-slot="settings.trigger"] button')
+    ?? [...document.querySelectorAll('button')].find((b) => {
+      const label = b.getAttribute('aria-label') ?? ''
+      return label === '设置' || label === 'Settings'
+    })
+  if (btn === null) return false
+  btn.click()
+  return true
+}
+
+/**
  * The drawer overlay: a floating trigger, a scrim, and a panel holding the
  * workspace selector and the selected workspace's sessions.
  * @param props - framework standard props plus the injected navigation calls.
@@ -554,6 +754,17 @@ function ageLabel(updatedAt: number, now: number): string {
 export function DrawerOverlay(props: DrawerOverlayProps) {
   injectStyles(STYLE_ID, CSS)
   const [open, setOpen] = useState(false)
+  const [reconnecting, setReconnecting] = useState(false)
+  const [connState, setConnState] = useState<string | undefined>(() => props.getConnectionState?.())
+  /** Live horizontal drag offset while swiping the panel closed. */
+  const [dragX, setDragX] = useState(0)
+  const dragRef = useRef<{ x0: number; y0: number; active: boolean; id: number } | null>(null)
+
+  useEffect(() => {
+    const sync = (): void => { setConnState(props.getConnectionState?.()) }
+    sync()
+    return props.subscribeConnection?.(sync)
+  }, [props])
 
   // Scroll affordance. A list that continues below the fold is indistinguishable
   // from a list that ends there, so the panel shows a fade while more content
@@ -630,6 +841,53 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     return () => { window.removeEventListener('keydown', onKey) }
   }, [open])
 
+  /**
+   * Swipe-left-to-close on the panel body.
+   *
+   * The panel opens from the left, so dismissing it with a leftward flick
+   * matches the motion (same as most mobile sheets). The system Back gesture
+   * owns the left screen edge; this lives inside the panel. Vertical list
+   * scroll is left alone: the drag only claims the gesture after |dx| clearly
+   * beats |dy| and dx is negative (towards the left / off-canvas).
+   */
+  const onPanelTouchStart = (e: ReactTouchEvent): void => {
+    if (!open || e.touches.length !== 1) return
+    const t0 = e.touches[0]
+    dragRef.current = { x0: t0.clientX, y0: t0.clientY, active: false, id: t0.identifier }
+  }
+
+  const onPanelTouchMove = (e: ReactTouchEvent): void => {
+    const d = dragRef.current
+    if (d === null || !open) return
+    const t0 = [...e.touches].find((t) => t.identifier === d.id)
+    if (t0 === undefined) return
+    const dx = t0.clientX - d.x0
+    const dy = t0.clientY - d.y0
+    if (!d.active) {
+      // Claim only a clear horizontal left-drag.
+      if (dx < -12 && Math.abs(dx) > Math.abs(dy) * 1.2) d.active = true
+      else if (Math.abs(dy) > 12) {
+        dragRef.current = null
+        return
+      } else return
+    }
+    // Rubber-band: no rightward pull past the open rest position.
+    setDragX(Math.min(0, dx))
+  }
+
+  const onPanelTouchEnd = (): void => {
+    const d = dragRef.current
+    dragRef.current = null
+    if (d === null || !d.active) {
+      setDragX(0)
+      return
+    }
+    // Commit if the user dragged far enough towards the left.
+    const commit = dragX < -72
+    setDragX(0)
+    if (commit) setOpen(false)
+  }
+
   // Re-measure whenever the drawer opens, the content changes, or the box
   // resizes (a keyboard shrinking the panel changes what fits).
   useEffect(() => {
@@ -685,17 +943,16 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
 
   const overlay = (
     <div className="dsh-mobile-drawer-root" data-open={open ? 'true' : 'false'} data-dsh-mobile-ui="drawer-overlay">
+      {/* Only open affordance: header text tab "导航". */}
       <button
         type="button"
-        className="dsh-mobile-drawer-trigger"
+        className="dsh-mobile-nav-tab"
         aria-label={t.drawerOpen}
         aria-expanded={open}
         data-dsh-mobile-ui="drawer-trigger"
         onClick={() => { setOpen(true) }}
       >
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" aria-hidden="true">
-          <path d="M2.5 5h13M2.5 9h13M2.5 13h13" />
-        </svg>
+        {t.drawerTitle}
       </button>
 
       <div
@@ -720,9 +977,29 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
            claiming modality would overstate it. */
         role="navigation"
         aria-label={t.drawerTitle}
+        data-dragging={dragX < 0 ? 'true' : 'false'}
+        style={dragX < 0 ? { transform: `translateX(${dragX}px)` } : undefined}
+        onTouchStart={onPanelTouchStart}
+        onTouchMove={onPanelTouchMove}
+        onTouchEnd={onPanelTouchEnd}
+        onTouchCancel={onPanelTouchEnd}
       >
         <div className="dsh-mobile-drawer-head">
           <span className="dsh-mobile-drawer-title">{t.drawerTitle}</span>
+          <button
+            type="button"
+            className="dsh-mobile-drawer-new"
+            aria-label={t.drawerNewSession}
+            data-dsh-mobile-ui="drawer-new-session"
+            onClick={() => {
+              setOpen(false)
+              requestAnimationFrame(() => { props.startSession?.() })
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true">
+              <path d="M9 3.5v11M3.5 9h11" />
+            </svg>
+          </button>
           <button
             type="button"
             className="dsh-mobile-drawer-close"
@@ -783,8 +1060,8 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                     data-dsh-mobile-ui="drawer-session"
                     onClick={() => { props.openSession(s.id); setOpen(false) }}
                   >
-                    <span className="dsh-mobile-sess-title" title={s.displayTitle}>
-                      <span>{s.displayTitle}</span>
+                    <span className="dsh-mobile-sess-title" title={redactSecrets(s.displayTitle)}>
+                      <span>{redactSecrets(s.displayTitle)}</span>
                     </span>
                     <span className="dsh-mobile-sess-meta">
                       {s.running || s.completed === true
@@ -796,6 +1073,79 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                 ))}
               </div>
             ))}
+        </div>
+
+        <div className="dsh-mobile-drawer-foot">
+          <span
+            className="dsh-mobile-conn-dot"
+            data-dsh-mobile-ui="drawer-conn"
+            data-state={connState ?? 'unknown'}
+            title={
+              connState === 'connected' ? t.connConnected
+                : connState === 'connecting' ? t.connConnecting
+                  : connState === 'disconnected' ? t.connDisconnected
+                    : '—'
+            }
+            aria-label={
+              connState === 'connected' ? t.connConnected
+                : connState === 'connecting' ? t.connConnecting
+                  : connState === 'disconnected' ? t.connDisconnected
+                    : undefined
+            }
+            aria-hidden={connState === undefined}
+          />
+
+          <button
+            type="button"
+            className="dsh-mobile-drawer-settings"
+            data-dsh-mobile-ui="drawer-settings"
+            onClick={() => {
+              setOpen(false)
+              // Next frame: let the scrim unmount so the settings modal is the
+              // topmost interactive surface.
+              requestAnimationFrame(() => { openHostSettings() })
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="9" cy="9" r="2.4" />
+              <path d="M9 2.2v1.6M9 14.2v1.6M2.2 9h1.6M14.2 9h1.6M4.2 4.2l1.1 1.1M12.7 12.7l1.1 1.1M13.8 4.2l-1.1 1.1M5.3 12.7l-1.1 1.1" />
+            </svg>
+            <span>{t.drawerSettings}</span>
+          </button>
+
+          <button
+            type="button"
+            className="dsh-mobile-drawer-refresh"
+            data-dsh-mobile-ui="drawer-refresh"
+            data-busy={reconnecting ? 'true' : 'false'}
+            aria-label={t.drawerRefresh}
+            aria-busy={reconnecting}
+            onClick={() => {
+              if (reconnecting) return
+              setReconnecting(true)
+              // Official recovery: abort the current attempt and start retry 1.
+              // Keeps the drawer open so the user sees the spinner complete.
+              props.reconnect?.()
+              window.setTimeout(() => { setReconnecting(false) }, 1200)
+            }}
+          >
+            <svg
+              className="dsh-mobile-drawer-refresh__ico"
+              width="18"
+              height="18"
+              viewBox="0 0 18 18"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M14.5 8.2A5.6 5.6 0 1 1 12.4 4" />
+              <path d="M12.2 1.8v3.2h3.2" />
+            </svg>
+            <span>{reconnecting ? t.drawerRefreshed : t.drawerRefresh}</span>
+          </button>
         </div>
       </div>
     </div>

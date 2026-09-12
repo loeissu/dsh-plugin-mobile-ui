@@ -97,6 +97,14 @@ const STATE = `(() => {
     viewport: window.innerWidth + 'x' + window.innerHeight,
     frameTemplate: frame ? getComputedStyle(frame).gridTemplateColumns : 'no-frame',
     sidebarDisplay: frame ? getComputedStyle(frame.querySelector(':scope > [class*="sidebarCol"]')).display : 'n/a',
+    sidebarPainted: frame ? (() => {
+      const sb = frame.querySelector(':scope > [class*="sidebarCol"]')
+      if (!sb) return false
+      const r = sb.getBoundingClientRect()
+      // Parked off-viewport: still display:block so the settings modal can paint,
+      // but no on-screen box and not hit-testable at the centre.
+      return r.width > 1 && r.height > 1 && r.right > 0 && r.left < window.innerWidth
+    })() : null,
     centreWidth: frame ? Math.round(frame.querySelector(':scope > [class*="centerCol"]').getBoundingClientRect().width) : -1,
     rootPresent: root !== null,
     open: root ? root.getAttribute('data-open') : null,
@@ -138,7 +146,9 @@ console.log('\n== CLOSED ==')
 const closed = JSON.parse(await evaluate(STATE))
 console.log(`  ${JSON.stringify(closed, null, 1)}`)
 check(closed.rootPresent, 'drawer overlay mounted into shell.overlay')
-check(closed.sidebarDisplay === 'none', 'native sidebar hidden at phone width', `display=${closed.sidebarDisplay}`)
+check(closed.sidebarPainted === false,
+  'native sidebar not painted at phone width (parked, not display:none)',
+  `display=${closed.sidebarDisplay} painted=${closed.sidebarPainted}`)
 check(closed.centreWidth === closed.viewport.split('x')[0] * 1,
   'conversation filled the freed space', `centre=${closed.centreWidth} viewport=${closed.viewport}`)
 check(closed.triggerPointerEvents === 'auto', 'floating trigger accepts taps')

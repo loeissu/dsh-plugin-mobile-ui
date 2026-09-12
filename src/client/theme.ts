@@ -83,7 +83,10 @@ export const V = {
   textDim: themeVar(TOKEN.textDim, BOOT.textDim),
   textFaint: themeVar(TOKEN.textFaint, BOOT.textFaint),
   accent: `var(${TOKEN.accent}, var(${TOKEN.text}))`,
-  mono: themeVar(TOKEN.mono),
+  // Fallback chain matters: if the code-face token is absent (older host or a
+  // trimmed build) the raw var() resolves to the guaranteed-invalid value and
+  // text falls back to the browser default serif-flavored monospace.
+  mono: `var(${TOKEN.mono}, ui-monospace, 'Cascadia Mono', 'Roboto Mono', monospace)`,
 } as const
 
 /**
@@ -96,6 +99,60 @@ export const V = {
 export function accentSoft(percent = 8): string {
   return `color-mix(in srgb, ${V.accent} ${percent}%, transparent)`
 }
+
+/**
+ * Type scale for every mobile surface this plugin draws.
+ *
+ * Six steps only — enough for overline → caption → body → display without
+ * the 11.5 / 12.5 / 13.3 drift that made the drawer and settings feel noisy.
+ * Pair each step with a label ramp in `V` (primary / dim / faint).
+ */
+export const TYPE = {
+  /** Overlines, time buckets, section labels. */
+  micro: '11px',
+  /** Ages, counts, footnotes, tool body. */
+  caption: '12px',
+  /** Secondary rows, tool titles, settings controls. */
+  bodySm: '13px',
+  /** Primary list rows and body copy. */
+  body: '14px',
+  /** Emphasized titles (drawer head, splash tagline lockup). */
+  bodyLg: '15px',
+  /** Splash product name. */
+  display: '19px',
+} as const
+
+/**
+ * Corner-radius scale. DSH publishes no radius tokens, so these stay numeric
+ * — but they are shared so a card and its inner chip never disagree.
+ */
+export const R = {
+  /** Inline chips, tool detail pills. */
+  xs: '5px',
+  /** Compact badges and counts. */
+  sm: '9px',
+  /** Icon buttons, settings rows, list affordances. */
+  md: '12px',
+  /** Tool cards, foot buttons. */
+  lg: '14px',
+  /** Settings cards. */
+  xl: '16px',
+  /** Drawer panel end-cap. */
+  panel: '30px',
+  /** Fully round (dots, knobs). */
+  pill: '999px',
+} as const
+
+/** Shared motion tokens for surfaces that animate. */
+export const MOTION = {
+  /** Default surface transition (scrim, switch). */
+  base: '200ms',
+  /** Drawer slide — slightly slower so it reads as a sheet, not a jump. */
+  sheet: '220ms',
+  /** Tool-card expand. */
+  expand: '280ms',
+  ease: 'cubic-bezier(.4, 0, .2, 1)',
+} as const
 
 /** Ids of the style tags this plugin owns. */
 const OWNED_STYLES = new Set<string>()

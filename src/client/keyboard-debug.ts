@@ -29,20 +29,26 @@
  * Diagnostic only, behind `FEATURES.keyboardDebug`. Remove once the device
  * behaviour is known.
  */
-import { injectStyles } from './theme.ts'
+import { injectStyles, R } from './theme.ts'
 
 const STYLE_ID = 'keyboard-debug'
 const BADGE_ID = 'dsh-mobile-kbd-debug'
 
 const CSS = `
 #${BADGE_ID} {
+  /* Bottom-right, not top-left. The drawer trigger lives at the top-left
+     corner; a badge over it swallows the only way into navigation on narrow
+     screens and looks like a dead hamburger. Same reason the z-index sits
+     below the drawer overlay (2147482000). */
   position: fixed;
-  top: 6px;
-  left: 6px;
-  z-index: 2147483000;
+  right: 6px;
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  left: auto;
+  top: auto;
+  z-index: 2147481000;
   font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: ${R.sm};
   background: rgba(0, 0, 0, 0.82);
   color: #fff;
   white-space: pre;

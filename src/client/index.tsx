@@ -37,7 +37,10 @@ import { SECTION_OPTIONS, SettingsSection } from './Settings.tsx'
 import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
 import { installKeyboardDebug } from './keyboard-debug.ts'
+import { installResumeReconnect } from './connection-recovery.ts'
+import { installSettingsChrome } from './settings-chrome.ts'
 import { installTetherCompat } from './tether-compat.ts'
+import { installTypography } from './typography.ts'
 import { installKeyboardFit } from './viewport.ts'
 
 /**
@@ -47,7 +50,7 @@ import { installKeyboardFit } from './viewport.ts'
  * `ctx.uiWorkspace` available inside the inject face; components never see
  * `ctx` themselves.
  */
-export const inject = ['slots', 'layout', 'uiWorkspace']
+export const inject = ['slots', 'layout', 'uiWorkspace', 'connection']
 
 /** Order for the splash cell; lower renders first within the list. */
 const SPLASH_ORDER = 10
@@ -96,6 +99,16 @@ export function apply(ctx: ClientContext): void {
   // so there is nothing to dispose.
   if (FEATURES.tetherCompat) installTetherCompat()
 
+  // Foreground recovery: reconnect when the page becomes visible and the wire
+  // is disconnected (Tether backgrounding often skips offline/online events).
+  if (FEATURES.resumeReconnect) {
+    ctx.effect(() => installResumeReconnect(ctx), 'mobile-ui: resume reconnect')
+  }
+
+  // Base typography for every surface below. Stylesheet only, so like the two
+  // installs above there is nothing to dispose.
+  if (FEATURES.typography) installTypography()
+
   // TEMPORARY diagnostic. See the flag's comment in config.ts.
   if (FEATURES.keyboardDebug) {
     ctx.effect(() => installKeyboardDebug(), 'mobile-ui: keyboard debug badge')
@@ -110,6 +123,8 @@ export function apply(ctx: ClientContext): void {
   }
 
   if (FEATURES.settings) {
+    // Mobile density for the host settings dialog; no slot, stylesheet only.
+    installSettingsChrome()
     ctx.slots.inject('settings.section', () =>
       ctx.slots.register(SECTION_OPTIONS, SettingsSection))
   }
@@ -137,6 +152,22 @@ export function apply(ctx: ClientContext): void {
               // the reader sees the conversation it navigates to.
               void ctx.uiWorkspace.openWorkspace(workspaceId)
             },
+            /** Start a New Session in the current / most recent workspace. */
+            startSession: (): void => { ctx.uiWorkspace.startSession() },
+            /**
+             * Force an immediate Host reconnect.
+             *
+             * Backgrounding the Tether shell often leaves the WebSocket half-dead
+             * without a clean `offline` event, so the auto-reconnect loop never
+             * runs. `reconnect()` aborts the current attempt and starts retry 1
+             * right away — the sanctioned recovery command.
+             */
+            reconnect: (): void => { ctx.connection.reconnect() },
+            /** Live Host wire state for the status dot. */
+            subscribeConnection: (cb: () => void): (() => void) =>
+              ctx.connection.state.subscribe(cb),
+            getConnectionState: (): string | undefined =>
+              ctx.connection.state.getSnapshot() as string | undefined,
           }),
         },
         DrawerOverlay,
