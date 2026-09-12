@@ -44,6 +44,8 @@ export const TOKEN = {
   accent: '--dsw-alias-brand-primary-new-colorprimary-new-color',
   /** Code / monospace face. */
   mono: '--ds-font-family-code',
+  /** Fenced-code fill. DSH's own token, so tool output matches host code fences. */
+  codeBlock: '--dsw-alias-markdown-code-block',
   /** Motion. Note the `--ds-` prefix, not `--dsw-`. */
   duration: '--ds-transition-duration',
   ease: '--ds-ease-in-out',
@@ -87,6 +89,9 @@ export const V = {
   // trimmed build) the raw var() resolves to the guaranteed-invalid value and
   // text falls back to the browser default serif-flavored monospace.
   mono: `var(${TOKEN.mono}, ui-monospace, 'Cascadia Mono', 'Roboto Mono', monospace)`,
+  // Host code fences use a tinted fill in both palettes (bg-base == bg-layer-1
+  // == #fff in light mode, so `bg` would leave the <pre> flush with the card).
+  codeBlock: themeVar(TOKEN.codeBlock, BOOT.bg),
 } as const
 
 /**
@@ -123,6 +128,28 @@ export const TYPE = {
 } as const
 
 /**
+ * Line height paired with each {@link TYPE} step.
+ *
+ * These exist because the same step used to carry different rhythms in different
+ * components — measured before: 12px appeared with line-heights of 18 / 19.8 /
+ * 20px, 14px with 20.3 / 21px, and 11px overlines inherited the global 1.5 floor
+ * (16.5px) instead of a deliberate 16px. Pairing the two makes the ramp a ramp.
+ *
+ * `code` is deliberately looser than `caption`: tool output is read line by line,
+ * and mono glyphs need more air than UI copy at the same size.
+ */
+export const TYPE_LH = {
+  micro: '16px',
+  caption: '18px',
+  bodySm: '18px',
+  body: '21px',
+  bodyLg: '22px',
+  display: '28px',
+  /** 12px monospace (tool output, inline code). */
+  code: '20px',
+} as const
+
+/**
  * Corner-radius scale. DSH publishes no radius tokens, so these stay numeric
  * — but they are shared so a card and its inner chip never disagree.
  */
@@ -143,14 +170,67 @@ export const R = {
   pill: '999px',
 } as const
 
+/**
+ * Spacing scale for the surfaces this plugin draws.
+ *
+ * Shared so a card and its inner chip cannot disagree about the gutter, and so
+ * "11px here, 13px there" stops creeping in. `rowY` is named rather than scaled:
+ * it is what makes a 44px row out of a 21px line (11 + 21 + 12), so rounding it
+ * to the scale would move every list row.
+ *
+ * Adoption is opportunistic — new and edited rules use these; untouched rules
+ * keep their literals until something else needs to change them.
+ */
+export const SPACE = {
+  /** Hairline separation inside a control. */
+  xs: '4px',
+  /** Chip / badge padding. */
+  sm: '6px',
+  /** Between related controls. */
+  md: '8px',
+  /** Row inset. */
+  lg: '12px',
+  /** Card inset. */
+  xl: '16px',
+  /** Between groups. */
+  xxl: '20px',
+  /** Vertical padding that completes a 44px row. */
+  rowY: '11px',
+} as const
+
+/**
+ * Stacking order for the plugin's layers.
+ *
+ * These used to be bare literals spread across three files with the ordering
+ * documented only in comments. The sheet and splash values are near the top of
+ * the 32-bit range on purpose: the drawer has to sit above the host's dialogs,
+ * which it cannot know in advance.
+ */
+export const Z = {
+  /** Boot splash — above everything, including the drawer. */
+  splash: '2147483000',
+  /** Drawer overlay. */
+  sheet: '2147482000',
+  /** Diagnostic badge: below the drawer so it cannot cover the trigger. */
+  debug: '2147481000',
+  /** Header-adjacent controls inside the host chrome (the 导航 tab). */
+  local: '2',
+  /** Sticky section labels inside a scroller. */
+  sticky: '1',
+} as const
+
 /** Shared motion tokens for surfaces that animate. */
 export const MOTION = {
   /** Default surface transition (scrim, switch). */
   base: '200ms',
   /** Drawer slide — slightly slower so it reads as a sheet, not a jump. */
   sheet: '220ms',
-  /** Tool-card expand. */
-  expand: '280ms',
+  /** Tool-card expand. Matches the host's own base step; see ToolCard. */
+  expand: '200ms',
+  /** Spinner rotation. Linear, and long enough to read as "working". */
+  spin: '900ms',
+  /** Status-dot pulse. */
+  pulse: '1200ms',
   ease: 'cubic-bezier(.4, 0, .2, 1)',
 } as const
 

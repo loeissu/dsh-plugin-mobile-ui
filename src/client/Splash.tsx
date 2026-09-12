@@ -36,7 +36,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { SPLASH_TIMING, t } from './config.ts'
-import { accentSoft, injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
+import { accentSoft, injectStyles, MOTION, R, TOKEN, TYPE, TYPE_LH, V, Z } from './theme.ts'
 
 /**
  * Plugin version, stamped by the bundler define (see `tsdown.config.ts`).
@@ -56,7 +56,7 @@ const CSS = `
      uncovered. */
   position: fixed;
   inset: 0;
-  z-index: 2147483000;
+  z-index: ${Z.splash};
   display: flex;
   flex-direction: column;
   align-items: center;

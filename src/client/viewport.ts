@@ -152,12 +152,14 @@ export function installKeyboardFit(): () => void {
   }
 
   const engage = (): void => {
+    if (disposed) return
     engaged = true
     root.style.setProperty(HEIGHT_VAR, `${Math.round(vv.height)}px`)
     root.style.setProperty(TOP_VAR, `${Math.round(vv.offsetTop)}px`)
   }
 
   const sync = (): void => {
+    if (disposed) return
     // Orientation change resizes one or both viewports in width. The old
     // high-water mark would then look like a keyboard that never closed.
     // Checking both catches hosts that resize the layout viewport and hosts
@@ -186,6 +188,35 @@ export function installKeyboardFit(): () => void {
   /** Two frames plus a short poll chain: first IME open often reports late. */
   let focusTimers: number[] = []
   let focusPoll: number | undefined
+  /**
+   * Every deferred callback that can still reach `sync()`, tracked together.
+   *
+   * `clearFocusWatch` used to clear only `focusTimers`/`focusPoll`, so the bare
+   * `requestAnimationFrame`s and the `setTimeout(sync, 80|220)` calls below stayed
+   * live past disposal. A post-dispose `sync()` can call `engage()` and write
+   * `--dsh-mobile-vv-height`/`--dsh-mobile-vv-top` back onto the root, and the
+   * stylesheet applies them with `!important` — so the frame would be pinned to a
+   * stale keyboard height with no keyboard present. `disposed` closes that.
+   */
+  let deferredTimeouts: number[] = []
+  let deferredFrames: number[] = []
+  let disposed = false
+
+  const later = (fn: () => void, ms: number): void => {
+    const id = window.setTimeout(() => {
+      deferredTimeouts = deferredTimeouts.filter((x) => x !== id)
+      if (!disposed) fn()
+    }, ms)
+    deferredTimeouts.push(id)
+  }
+
+  const nextFrame = (fn: () => void): void => {
+    const id = requestAnimationFrame(() => {
+      deferredFrames = deferredFrames.filter((x) => x !== id)
+      if (!disposed) fn()
+    })
+    deferredFrames.push(id)
+  }
 
   const clearFocusWatch = (): void => {
     for (const id of focusTimers) window.clearTimeout(id)
@@ -212,7 +243,7 @@ export function installKeyboardFit(): () => void {
    */
   const watchFocus = (): void => {
     clearFocusWatch()
-    requestAnimationFrame(() => { requestAnimationFrame(sync) })
+    nextFrame(() => { nextFrame(sync) })
     for (const ms of [40, 100, 180, 320, 500, 800]) {
       focusTimers.push(window.setTimeout(sync, ms))
     }
@@ -233,9 +264,9 @@ export function installKeyboardFit(): () => void {
   const onFocusOut = (): void => {
     // One more pass after blur: the IME may close asynchronously and we must
     // not leave the frame pinned to a stale short height.
-    requestAnimationFrame(sync)
-    window.setTimeout(sync, 80)
-    window.setTimeout(sync, 220)
+    nextFrame(sync)
+    later(sync, 80)
+    later(sync, 220)
   }
 
   /**
@@ -279,7 +310,7 @@ export function installKeyboardFit(): () => void {
       : null
 
     editable.blur()
-    requestAnimationFrame(() => {
+    nextFrame(() => {
       editable.focus()
       if ((editable instanceof HTMLTextAreaElement || editable instanceof HTMLInputElement)
         && start !== null && end !== null) {
@@ -311,6 +342,15 @@ export function installKeyboardFit(): () => void {
   if (isEditingFocus()) watchFocus()
 
   return () => {
+    // First: nothing deferred may run past this point (see the pools above).
+    // Timeout and frame ids come from different counters, so they are cancelled
+    // through their own pool — calling cancelAnimationFrame on a timer id (or the
+    // reverse) can cancel a callback that belongs to the host.
+    disposed = true
+    for (const id of deferredTimeouts) window.clearTimeout(id)
+    for (const id of deferredFrames) cancelAnimationFrame(id)
+    deferredTimeouts = []
+    deferredFrames = []
     clearFocusWatch()
     window.clearInterval(ambientPoll)
     vv.removeEventListener('resize', sync)

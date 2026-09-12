@@ -18,7 +18,7 @@
 import { useEffect, useState } from 'react'
 import { FEATURES, t } from './config.ts'
 import { replaySplash, setSplashStatus } from './Splash.tsx'
-import { accentSoft, injectStyles, isDarkTheme, MOTION, observeTheme, R, TOKEN, TYPE, V } from './theme.ts'
+import { accentSoft, injectStyles, isDarkTheme, MOTION, observeTheme, R, SPACE, TOKEN, TYPE, TYPE_LH, V } from './theme.ts'
 
 const STYLE_ID = 'settings'
 
@@ -33,7 +33,7 @@ const CSS = `
 
 .dsh-mobile-settings__heading {
   font-size: ${TYPE.micro};
-  line-height: 16px;
+  line-height: ${TYPE_LH.micro};
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 600;
@@ -54,7 +54,7 @@ const CSS = `
   gap: 12px;
   /* >=44px keeps every row inside the touch target minimum. */
   min-height: 44px;
-  padding: 11px 14px;
+  padding: ${SPACE.rowY} 14px;
   border-bottom: 0.5px solid ${V.border};
 }
 
@@ -64,11 +64,12 @@ const CSS = `
   flex: 1;
   min-width: 0;
   font-size: ${TYPE.body};
-  line-height: 1.5;
+  line-height: ${TYPE_LH.body};
 }
 
 .dsh-mobile-settings__value {
   font-size: ${TYPE.bodySm};
+  line-height: ${TYPE_LH.bodySm};
   /* textDim, not textFaint: at 13px the faint ramp is 3.71:1 on the light
      surface, below WCAG AA 4.5:1. The faint ramp stays on 11px overlines. */
   color: ${V.textDim};
@@ -115,9 +116,14 @@ const CSS = `
   flex: none;
   font: inherit;
   font-size: ${TYPE.caption};
+  line-height: ${TYPE_LH.caption};
   font-weight: 500;
-  padding: 5px 12px;
-  border-radius: ${R.lg};
+  /* R.md + 36px: it used to be R.lg (14px) on a ~28px control, which reads as a
+     pill rather than the 12/16px corner the cards around it use, and sat well
+     under the touch minimum. */
+  min-height: 36px;
+  padding: ${SPACE.sm} ${SPACE.lg};
+  border-radius: ${R.md};
   border: 0.5px solid ${V.border};
   background: transparent;
   color: inherit;
@@ -143,7 +149,7 @@ const CSS = `
 
 .dsh-mobile-settings__note {
   font-size: ${TYPE.caption};
-  line-height: 1.7;
+  line-height: ${TYPE_LH.caption};
   /* Same reason as __value: 12px on the faint ramp fails AA in light mode. */
   color: ${V.textDim};
   padding: 0 4px;

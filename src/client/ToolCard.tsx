@@ -39,7 +39,7 @@
  * "Unknown or malformed tool data falls back to the generic form."
  */
 import { useEffect, useState } from 'react'
-import { accentSoft, injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
+import { accentSoft, injectStyles, MOTION, R, SPACE, TOKEN, TYPE, TYPE_LH, V } from './theme.ts'
 import { t } from './config.ts'
 
 /** A settled tool result, as much of it as this card reads. */
@@ -90,7 +90,8 @@ const CSS = `
   align-items: center;
   gap: 10px;
   min-height: 44px;
-  padding: 11px 14px;
+  /* rowY (11px) is what turns a 21px line into a 44px target. */
+  padding: ${SPACE.rowY} 14px;
   cursor: pointer;
   user-select: none;
   background: transparent;
@@ -120,7 +121,7 @@ const CSS = `
   flex: 1;
   min-width: 0;
   font-size: ${TYPE.bodySm};
-  line-height: 1.4;
+  line-height: ${TYPE_LH.bodySm};
   color: ${V.textDim};
   overflow: hidden;
   text-overflow: ellipsis;
@@ -130,6 +131,7 @@ const CSS = `
 .dsh-mobile-tool__detail {
   font-family: ${V.mono};
   font-size: ${TYPE.caption};
+  line-height: ${TYPE_LH.caption};
   /* Mixing the accent towards the theme's primary label darkens it in light mode
      and lightens it in dark mode, so contrast rises in BOTH palettes. Measured
      before: the plain accent is 4.23:1 on the light card at 12px (below AA),
@@ -143,7 +145,7 @@ const CSS = `
 .dsh-mobile-tool__count {
   flex: none;
   font-size: ${TYPE.micro};
-  line-height: 16px;
+  line-height: ${TYPE_LH.micro};
   color: ${V.textFaint};
   background: ${V.hover};
   border-radius: ${R.sm};
@@ -162,7 +164,8 @@ const CSS = `
 .dsh-mobile-tool[data-open='true'] .dsh-mobile-tool__chev { transform: rotate(180deg); }
 
 /* 0fr -> 1fr is the animatable grid-row idiom: it transitions to the content's
-   natural height without measuring it in JS. */
+   natural height without measuring it in JS. It IS a layout animation, so the
+   body carries contain: layout paint to keep the relayout inside the card. */
 .dsh-mobile-tool__body {
   display: grid;
   grid-template-rows: 0fr;
@@ -175,23 +178,36 @@ const CSS = `
   border-top-color: ${V.border};
 }
 
-.dsh-mobile-tool__body > div { overflow: hidden; }
+.dsh-mobile-tool__body > div {
+  overflow: hidden;
+  contain: layout paint;
+}
 
 .dsh-mobile-tool__pre {
   margin: 0;
   padding: 13px 15px;
   font-family: ${V.mono};
   font-size: ${TYPE.caption};
-  line-height: 1.65;
+  line-height: ${TYPE_LH.code};
   /* Tool output is read as code: ligature substitution can fuse characters
      that the user needs to copy verbatim. */
   font-variant-ligatures: none;
   color: ${V.textDim};
-  background: ${V.bg};
+  /* Host code fences use their own fill: bg-base and bg-layer-1 are BOTH #fff in
+     light mode, so V.bg left the block flush with the card. */
+  background: ${V.codeBlock};
   white-space: pre;
   overflow-x: auto;
+  /* 60vh is the static viewport height and ignores the keyboard that
+     viewport.ts shrinks the frame for; dvh follows it. The vh line stays as the
+     fallback for engines without dvh. */
   max-height: 60vh;
+  max-height: min(60dvh, 420px);
   overflow-y: auto;
+  /* Without this, reaching the end of the output chains the scroll to the
+     conversation behind it. */
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 @media (prefers-reduced-motion: reduce) {

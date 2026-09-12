@@ -58,7 +58,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { TouchEvent as ReactTouchEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { t } from './config.ts'
-import { injectStyles, MOTION, R, TOKEN, TYPE, V } from './theme.ts'
+import { injectStyles, MOTION, R, SPACE, TOKEN, TYPE, TYPE_LH, V, Z } from './theme.ts'
 
 const STYLE_ID = 'drawer'
 
@@ -81,6 +81,15 @@ const NARROW = '(max-width: 768px)'
  * ellipsis already replaces one character and any real overhang hides more.
  */
 const MARQUEE_MIN_PX = 4
+
+/**
+ * CSS variable carrying the live drag offset.
+ *
+ * Module scope on purpose: the stylesheet below reads it, and that template is
+ * evaluated when the module loads — a copy declared inside the component is not
+ * in scope there (the offline bundle check catches exactly this).
+ */
+const DRAG_VAR = '--dsh-mobile-drag-x'
 
 const CSS = `
 /* ── the drawer exists only on narrow screens ──────────────────────────────
@@ -164,7 +173,7 @@ const CSS = `
     left: 0;
     right: 0;
     height: var(--dsh-mobile-vv-height, 100%);
-    z-index: 2147482000;
+    z-index: ${Z.sheet};
     pointer-events: none;
     font-size: ${TYPE.body};
     color: ${V.text};
@@ -189,19 +198,19 @@ const CSS = `
     color: ${V.textDim};
     cursor: pointer;
     pointer-events: auto;
-    z-index: 2;
+    z-index: ${Z.local};
     transition: color ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-nav-tab:active { color: ${V.accent}; }
   /* Touch target. The label paints ~25px tall, which is the only route into the
-     drawer on a phone, so the pseudo-element grows the HIT AREA to 44px without
-     moving the text or changing the tablist layout. Measured room: the host's
-     first tab starts 30px to the right of this label, and the header band is
-     ~90px tall, so -9px vertically and -10px horizontally stay clear. */
+     drawer on a phone, so the pseudo-element grows the HIT AREA without moving the
+     text or changing the tablist layout: -10px on all four sides leaves a 45x44
+     target (measured by walking outward with elementFromPoint). Room is there —
+     the host's first tab starts 30px to the right and the header band is ~90px. */
   .dsh-mobile-nav-tab::after {
     content: '';
     position: absolute;
-    inset: -9px -10px;
+    inset: -10px;
   }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-nav-tab {
     opacity: 0;
@@ -253,13 +262,13 @@ const CSS = `
     border-right: 0.5px solid ${V.border};
     border-radius: 0 ${R.panel} ${R.panel} 0;
     box-shadow: 0 10px 36px rgba(0, 0, 0, 0.24);
-    transform: translateX(-100%);
+    transform: translateX(calc(-100% + var(${DRAG_VAR}, 0px)));
     pointer-events: none;
     transition: transform ${MOTION.sheet} ${MOTION.ease};
     padding-top: env(safe-area-inset-top, 0px);
   }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-drawer-panel {
-    transform: translateX(0);
+    transform: translateX(var(${DRAG_VAR}, 0px));
     pointer-events: auto;
   }
   /* Follow the finger 1:1 while swiping; the close/open transitions would
@@ -299,6 +308,16 @@ const CSS = `
     color: ${V.textDim};
     cursor: pointer;
     transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
+    /* 36px visual, 44px target: this sits 10px from ＋ which does the opposite
+       thing (new session vs close), so a near miss is expensive. */
+    position: relative;
+  }
+  .dsh-mobile-drawer-close::after, .dsh-mobile-drawer-new::after {
+    content: '';
+    position: absolute;
+    /* -5px, not -4px: a 36px box plus 4px per side measures 43 by pixel walk (the
+       far edge is exclusive), so the extra pixel buys a real 45px target. */
+    inset: -5px;
   }
   .dsh-mobile-drawer-close:active { background: ${V.active}; }
 
@@ -316,18 +335,19 @@ const CSS = `
     color: ${V.accent};
     cursor: pointer;
     transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
+    position: relative;
   }
   .dsh-mobile-drawer-new:active { background: ${V.active}; }
 
   .dsh-mobile-drawer-foot {
     flex: none;
     position: relative;
-    z-index: 2;
+    z-index: ${Z.local};
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: ${SPACE.md};
     min-height: 52px;
-    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    padding: ${SPACE.md} ${SPACE.lg} calc(${SPACE.md} + env(safe-area-inset-bottom, 0px));
     border-top: 0.5px solid ${V.border};
     background: ${V.surface};
   }
@@ -391,23 +411,47 @@ const CSS = `
     flex: none;
     width: 8px;
     height: 8px;
+    display: inline-block;
     border-radius: ${R.pill};
     corner-shape: round;
     background: ${V.textFaint};
   }
   .dsh-mobile-conn-dot[data-state='connected'] { background: ${V.accent}; }
+  /* Connecting keeps the accent at FULL opacity: the pulse carries the meaning,
+     so the dot never has to read "grey" to say "not yet". Dimming it to 0.55 put
+     the indicator at 2.10:1 on the light surface, under the 3:1 that a non-text
+     graphic needs. */
   .dsh-mobile-conn-dot[data-state='connecting'] {
     background: ${V.accent};
-    opacity: 0.55;
-    animation: dsh-mobile-conn-pulse 1.2s ease-in-out infinite;
+    animation: dsh-mobile-conn-pulse ${MOTION.pulse} ease-in-out infinite;
   }
   .dsh-mobile-conn-dot[data-state='disconnected'] { background: ${V.textFaint}; }
   @keyframes dsh-mobile-conn-pulse {
-    0%, 100% { opacity: 0.35; }
+    0%, 100% { opacity: 0.4; }
     50% { opacity: 1; }
   }
+  /* With the animation off the accent dot would be indistinguishable from
+     "connected", so the reduced-motion state becomes a ring instead: same
+     contrast, different shape, no motion. */
   @media (prefers-reduced-motion: reduce) {
-    .dsh-mobile-conn-dot[data-state='connecting'] { animation: none; opacity: 0.7; }
+    .dsh-mobile-conn-dot[data-state='connecting'] {
+      animation: none;
+      box-shadow: inset 0 0 0 1.5px ${V.surface};
+    }
+  }
+
+  /* Screen-reader-only text: the status dot is the only connection indicator in
+     the mobile UI, so it must not be colour-only. */
+  .dsh-mobile-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
   }
 
   .dsh-mobile-drawer-body {
@@ -434,10 +478,11 @@ const CSS = `
   .dsh-mobile-drawer-label {
     position: sticky;
     top: 0;
-    z-index: 1;
+    z-index: ${Z.sticky};
     pointer-events: none;
     background: ${V.surface};
     font-size: ${TYPE.micro};
+    line-height: ${TYPE_LH.micro};
     letter-spacing: 0.04em;
     text-transform: uppercase;
     font-weight: 600;
@@ -568,7 +613,7 @@ const CSS = `
   .dsh-mobile-sess-title {
     display: block;
     font-size: ${TYPE.body};
-    line-height: 1.45;
+    line-height: ${TYPE_LH.body};
     overflow: hidden;
     white-space: nowrap;
     color: ${V.textDim};
@@ -606,8 +651,9 @@ const CSS = `
   .dsh-mobile-sess-meta {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: ${SPACE.sm};
     font-size: ${TYPE.caption};
+    line-height: ${TYPE_LH.caption};
     /* textDim, not textFaint: 3.71:1 on the light surface fails AA at 12px. */
     color: ${V.textDim};
     margin-top: 3px;
@@ -622,12 +668,16 @@ const CSS = `
     corner-shape: round;
   }
   .dsh-mobile-sess-state[data-state='running'] { background: ${V.accent}; }
-  .dsh-mobile-sess-state[data-state='done'] { background: ${V.accent}; opacity: 0.55; }
+  /* "done" used to be the accent at 55% opacity, which blends to 2.10:1 on the
+     light surface — under the 3:1 a non-text graphic needs, and the two states
+     differed only by that dimming. It is now the neutral label colour (5.80:1),
+     so running reads blue and finished reads grey. */
+  .dsh-mobile-sess-state[data-state='done'] { background: ${V.textDim}; }
 
   .dsh-mobile-drawer-empty {
     padding: 18px 16px;
     font-size: ${TYPE.caption};
-    line-height: 1.7;
+    line-height: ${TYPE_LH.caption};
     color: ${V.textDim};
   }
 
@@ -783,15 +833,60 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   const [open, setOpen] = useState(false)
   const [reconnecting, setReconnecting] = useState(false)
   const [connState, setConnState] = useState<string | undefined>(() => props.getConnectionState?.())
-  /** Live horizontal drag offset while swiping the panel closed. */
-  const [dragX, setDragX] = useState(0)
+  /** Cap on the manual-refresh spinner; the wire is the real signal. */
+  const REFRESH_CAP_MS = 4000
+  /** Floor so a tap on an already-connected wire still shows its spinner. */
+  const REFRESH_MIN_MS = 700
+  const reconnectTimer = useRef<number | null>(null)
+  /**
+   * Horizontal drag offset while swiping the panel closed.
+   *
+   * Deliberately NOT React state: every `touchmove` used to call setState, which
+   * re-rendered the whole drawer — all workspaces and session rows, none of them
+   * memoized — 60-120 times per swipe (measured: 30 moves cost 105 style recalculations
+   * and 42 layouts). The offset now goes straight to a CSS variable on the panel,
+   * and React only hears about the outcome (open/closed).
+   */
+  const dragXRef = useRef(0)
   const dragRef = useRef<{ x0: number; y0: number; active: boolean; id: number } | null>(null)
 
+  // Depend on the two callbacks, not on `props`: the renderer builds the prop
+  // object fresh on every render (`{ ...kit, ...injected, ...ownerProps }`), so
+  // `[props]` tore down and re-added the connection subscription on every drawer
+  // render while a session was streaming.
+  const { getConnectionState, subscribeConnection } = props
   useEffect(() => {
-    const sync = (): void => { setConnState(props.getConnectionState?.()) }
+    const sync = (): void => { setConnState(getConnectionState?.()) }
     sync()
-    return props.subscribeConnection?.(sync)
-  }, [props])
+    return subscribeConnection?.(sync)
+  }, [getConnectionState, subscribeConnection])
+
+  /** Text for the status dot: announced to assistive tech, never colour-only. */
+  const connLabel = connState === 'connected' ? t.connConnected
+    : connState === 'connecting' ? t.connConnecting
+      : connState === 'disconnected' ? t.connDisconnected
+        : ''
+
+  /**
+   * Refresh is "busy" until the wire confirms the reconnect.
+   *
+   * Derived from the connection state rather than from a fixed timer: the old
+   * 1.2s window cleared the spinner (and displayed 已刷新) whether or not the
+   * connection came back, so it reported success over a dead wire. The minimum
+   * below exists only so a tap on an already-healthy wire still acknowledges
+   * itself; the cap keeps a dead wire from spinning forever.
+   */
+  const refreshBusy = reconnecting
+  const refreshStartedAt = useRef(0)
+  useEffect(() => {
+    if (!reconnecting || connState !== 'connected') return
+    const wait = Math.max(0, REFRESH_MIN_MS - (Date.now() - refreshStartedAt.current))
+    const id = window.setTimeout(() => { setReconnecting(false) }, wait)
+    return () => { window.clearTimeout(id) }
+  }, [reconnecting, connState])
+  useEffect(() => () => {
+    if (reconnectTimer.current !== null) window.clearTimeout(reconnectTimer.current)
+  }, [])
 
   // Scroll affordance. A list that continues below the fold is indistinguishable
   // from a list that ends there, so the panel shows a fade while more content
@@ -923,6 +1018,24 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     }
   }, [t.drawerTitle])
 
+  /** Write the drag offset straight to the panel; no React render involved. */
+  const applyDrag = (x: number): void => {
+    dragXRef.current = x
+    const panel = panelRef.current
+    if (panel === null) return
+    panel.style.setProperty(DRAG_VAR, `${Math.round(x)}px`)
+    panel.setAttribute('data-dragging', 'true')
+  }
+
+  /** Hand the transform back to the stylesheet, transition intact. */
+  const clearDrag = (): void => {
+    dragXRef.current = 0
+    const panel = panelRef.current
+    if (panel === null) return
+    panel.removeAttribute('data-dragging')
+    panel.style.removeProperty(DRAG_VAR)
+  }
+
   /**
    * Swipe-left-to-close on the panel body.
    *
@@ -954,19 +1067,22 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       } else return
     }
     // Rubber-band: no rightward pull past the open rest position.
-    setDragX(Math.min(0, dx))
+    applyDrag(Math.min(0, dx))
   }
 
   const onPanelTouchEnd = (): void => {
     const d = dragRef.current
     dragRef.current = null
     if (d === null || !d.active) {
-      setDragX(0)
+      clearDrag()
       return
     }
-    // Commit if the user dragged far enough towards the left.
-    const commit = dragX < -72
-    setDragX(0)
+    // Commit if the user dragged far enough towards the left. Clearing the drag
+    // (and dropping data-dragging) in the same frame lets the CSS transition
+    // interpolate from the released position to the target, so the sheet still
+    // animates out instead of snapping back first.
+    const commit = dragXRef.current < -72
+    clearDrag()
     if (commit) setOpen(false)
   }
 
@@ -1060,8 +1176,6 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
            claiming modality would overstate it. */
         role="navigation"
         aria-label={t.drawerTitle}
-        data-dragging={dragX < 0 ? 'true' : 'false'}
-        style={dragX < 0 ? { transform: `translateX(${dragX}px)` } : undefined}
         onTouchStart={onPanelTouchStart}
         onTouchMove={onPanelTouchMove}
         onTouchEnd={onPanelTouchEnd}
@@ -1160,24 +1274,16 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
           {moreBelow
             ? <div className="dsh-mobile-drawer-more" data-dsh-mobile-ui="drawer-more" aria-hidden="true" />
             : null}
+          {/* The only connection indicator in the mobile UI, so the state is
+              announced as text rather than carried by the dot's colour alone. */}
           <span
             className="dsh-mobile-conn-dot"
             data-dsh-mobile-ui="drawer-conn"
             data-state={connState ?? 'unknown'}
-            title={
-              connState === 'connected' ? t.connConnected
-                : connState === 'connecting' ? t.connConnecting
-                  : connState === 'disconnected' ? t.connDisconnected
-                    : '—'
-            }
-            aria-label={
-              connState === 'connected' ? t.connConnected
-                : connState === 'connecting' ? t.connConnecting
-                  : connState === 'disconnected' ? t.connDisconnected
-                    : undefined
-            }
-            aria-hidden={connState === undefined}
-          />
+            title={connLabel}
+          >
+            <span className="dsh-mobile-sr-only" role="status" aria-live="polite">{connLabel}</span>
+          </span>
 
           <button
             type="button"
@@ -1203,14 +1309,22 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
             data-dsh-mobile-ui="drawer-refresh"
             data-busy={reconnecting ? 'true' : 'false'}
             aria-label={t.drawerRefresh}
-            aria-busy={reconnecting}
+            aria-busy={refreshBusy}
             onClick={() => {
-              if (reconnecting) return
+              if (refreshBusy) return
+              refreshStartedAt.current = Date.now()
               setReconnecting(true)
               // Official recovery: abort the current attempt and start retry 1.
               // Keeps the drawer open so the user sees the spinner complete.
               props.reconnect?.()
-              window.setTimeout(() => { setReconnecting(false) }, 1200)
+              // Safety cap only. The busy state normally ends the moment the wire
+              // reports connected (see the effect above); it used to be a blind
+              // 1.2s timer that reported success over a dead connection.
+              if (reconnectTimer.current !== null) window.clearTimeout(reconnectTimer.current)
+              reconnectTimer.current = window.setTimeout(() => {
+                reconnectTimer.current = null
+                setReconnecting(false)
+              }, REFRESH_CAP_MS)
             }}
           >
             <svg
@@ -1228,7 +1342,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
               <path d="M14.5 8.2A5.6 5.6 0 1 1 12.4 4" />
               <path d="M12.2 1.8v3.2h3.2" />
             </svg>
-            <span>{reconnecting ? t.drawerRefreshed : t.drawerRefresh}</span>
+            <span>{refreshBusy ? t.drawerRefreshed : t.drawerRefresh}</span>
           </button>
         </div>
       </div>

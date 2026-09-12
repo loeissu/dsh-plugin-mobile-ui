@@ -29,7 +29,7 @@
  * Diagnostic only, behind `FEATURES.keyboardDebug`. Remove once the device
  * behaviour is known.
  */
-import { injectStyles, R } from './theme.ts'
+import { injectStyles, R, Z } from './theme.ts'
 
 const STYLE_ID = 'keyboard-debug'
 const BADGE_ID = 'dsh-mobile-kbd-debug'
@@ -45,7 +45,7 @@ const CSS = `
   bottom: calc(6px + env(safe-area-inset-bottom, 0px));
   left: auto;
   top: auto;
-  z-index: 2147481000;
+  z-index: ${Z.debug};
   font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   padding: 6px 8px;
   border-radius: ${R.sm};

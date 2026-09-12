@@ -142,9 +142,30 @@ drawerOverlay: true
 
 `xs 5` / `sm 9` / `md 12` / `lg 14` / `xl 16` / `panel 30` / `pill 999`
 
+### 行高 `TYPE_LH`（2026-09-12 新增）
+
+每个字号配一个行高，避免同一步骤在不同组件里出现多种节奏：
+
+| 字号 | 行高 |
+|---|---|
+| micro 11 | 16px |
+| caption 12 | 18px |
+| bodySm 13 | 18px |
+| body 14 | 21px |
+| bodyLg 15 | 22px |
+| display 19 | 28px |
+| code 12（等宽） | 20px（代码比 UI 文案需要更多空气） |
+
+### 间距 `SPACE` / 层序 `Z`（2026-09-12 新增）
+
+- `SPACE`：`xs 4` / `sm 6` / `md 8` / `lg 12` / `xl 16` / `xxl 20`，另有具名的 `rowY 11`（11 + 21 + 12 = 44px 行高的来源）。采用是**机会式**的：新写或正在改的规则用它，其它保持字面量直到下次需要动。
+- `Z`：`splash 2147483000` / `sheet 2147482000` / `debug 2147481000` / `local 2` / `sticky 1`。抽屉必须在宿主弹层之上，而我们无法预知宿主的层序，所以前三个刻意贴近 32 位上限。
+
 ### 动效 `MOTION`
 
-`base 200ms` · `sheet 220ms` · `expand 280ms` · `cubic-bezier(.4,0,.2,1)`
+`base 200ms` · `sheet 220ms` · `expand 200ms` · `spin 900ms` · `pulse 1200ms` · `cubic-bezier(.4,0,.2,1)`
+
+遮罩与面板**成对**（同 220ms、同曲线）；工具卡展开用 `expand`；所有过渡的 `var()` 兜底都是 `MOTION.ease`（早期写的 CSS 关键字 `ease` 是另一条曲线，已改掉）。
 
 颜色一律走 DSH `--dsw-alias-*`（accent 用 `--dsw-alias-brand-primary-new-colorprimary-new-color`，**不是** `brand-primary`）。
 
@@ -271,7 +292,7 @@ src/
   client/
     index.tsx                   apply：注册全部表面
     config.ts                   FEATURES + zh/en 文案
-    theme.ts                    V / TYPE / R / MOTION / injectStyles
+    theme.ts                    V / TYPE / TYPE_LH / R / SPACE / Z / MOTION / injectStyles
     typography.ts               排版基线
     Splash.tsx                  启动页
     Settings.tsx                设置节

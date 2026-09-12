@@ -34,7 +34,8 @@ await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
 // Walk outward from the label's box, 1px at a time, and stop where the probe no
-// longer lands on the button. The result is the target the finger can actually hit.
+// longer lands on the button. The two reaches are measured FROM THE CENTRE, so the
+// target is their sum — adding the painted box on top would double-count it.
 const reach = JSON.parse(await ev(`(() => {
   const tab = document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')
   if (!tab) return JSON.stringify({ missing: true })
@@ -44,7 +45,7 @@ const reach = JSON.parse(await ev(`(() => {
   const left = walk(-1, 0), right = walk(1, 0), up = walk(0, -1), down = walk(0, 1)
   return JSON.stringify({
     painted: [Math.round(b.width), Math.round(b.height)],
-    hit: [Math.round(b.width) + left + right, Math.round(b.height) + up + down],
+    hit: [left + right, up + down],
     reach: { left, right, up, down },
   })
 })()`))
@@ -55,17 +56,34 @@ check(reach.hit?.[1] >= 44, '导航 hit area is at least 44px tall', `painted ${
 
 await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')?.click()`)
 await sleep(600)
+
+// Same walk for the two header buttons: 36px painted, 44px target via ::after.
+const header = JSON.parse(await ev(`(() => {
+  const measure = (sel) => {
+    const el = document.querySelector(sel)
+    if (!el) return { missing: true }
+    const b = el.getBoundingClientRect()
+    const hits = (x, y) => { const t = document.elementFromPoint(x, y); return t === el || (t !== null && el.contains(t)) }
+    const walk = (dx, dy) => { let n = 0; while (n < 30 && hits(b.left + b.width / 2 + dx * (n + 1), b.top + b.height / 2 + dy * (n + 1))) n += 1; return n }
+    const l = walk(-1, 0), r = walk(1, 0), u = walk(0, -1), d = walk(0, 1)
+    return { painted: [Math.round(b.width), Math.round(b.height)], hit: [l + r, u + d] }
+  }
+  return JSON.stringify({ new: measure('[data-dsh-mobile-ui="drawer-new-session"]'), close: measure('[data-dsh-mobile-ui="drawer-close"]') })
+})()`))
+console.log('header buttons:', JSON.stringify(header))
+check(header.new?.hit?.[0] >= 44 && header.new?.hit?.[1] >= 44, '＋ (new session) reaches 44px', `painted ${header.new?.painted} → hit ${header.new?.hit}`)
+check(header.close?.hit?.[0] >= 44 && header.close?.hit?.[1] >= 44, '× (close) reaches 44px', `painted ${header.close?.painted} → hit ${header.close?.hit}`)
+
 const controls = JSON.parse(await ev(`JSON.stringify([...document.querySelectorAll('[data-dsh-mobile-ui^="drawer-"]')]
   .filter(e => e.tagName === 'BUTTON' && e.getBoundingClientRect().width > 0)
   .map(e => { const b = e.getBoundingClientRect(); return { m: e.getAttribute('data-dsh-mobile-ui'), t: (e.textContent || '').trim().slice(0, 10), w: Math.round(b.width), h: Math.round(b.height) } }))`))
 console.log('drawer buttons:', JSON.stringify(controls))
-// Known and deliberate: the two header buttons are 36x36 today (audit §3.14,
-// batch B). The 导航 label is excluded here because its rect is only the painted
-// text — its reach is measured by the walk above.
+// The 导航 label is excluded here because its rect is only the painted text — its
+// reach is measured by the walk above (as are the two header buttons).
 const PAINTED_BOX_EXCEPTIONS = ['drawer-new-session', 'drawer-close', 'drawer-trigger']
 const small = controls.filter((c) => c.h < 44 && !PAINTED_BOX_EXCEPTIONS.includes(c.m))
-check(small.length === 0, 'drawer buttons outside the known exceptions are at least 44px tall',
-  small.length ? small.map((c) => `${c.m} ${c.w}x${c.h}`).join(', ') : `${controls.length - PAINTED_BOX_EXCEPTIONS.filter((m) => controls.some((c) => c.m === m)).length} buttons checked`)
+check(small.length === 0, 'drawer buttons outside the measured ones are at least 44px tall',
+  small.length ? small.map((c) => `${c.m} ${c.w}x${c.h}`).join(', ') : `${controls.length - 3} buttons checked`)
 check(controls.some((c) => c.m === 'drawer-settings' && c.h >= 44) && controls.some((c) => c.m === 'drawer-refresh' && c.h >= 44),
   '设置 and 刷新连接 keep a 44px row')
 
