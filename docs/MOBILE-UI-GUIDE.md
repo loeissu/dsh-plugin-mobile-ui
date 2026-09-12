@@ -75,6 +75,7 @@ dsh plugin --profile web add .
 | tether 兼容 | `tether-compat.ts` | 反制 tether 过宽选择器：① `_row` 规则压扁排队栏；② 模态框规则让确认弹层标题压住正文、按钮被卡片裁掉 |
 | 排版基线 | `typography.ts` | 关 WebView 字体放大、行高下限、去点按闪灰 |
 | 主机设置弹层排版 | `settings-chrome.ts` | 窄屏字号/间距/主题三列 |
+| 会话控件命中区 | `conversation-chrome.ts` | 宿主的消息操作/composer/`对话`·`轨迹` 命中区扩大到 35–43px（绘制尺寸不变；2026-09-12 新增）|
 | 键盘诊断徽章 | `keyboard-debug.ts` | 临时，默认关 |
 | 回前台自动重连 | `connection-recovery.ts` | `visibilitychange` + disconnected → reconnect |
 
@@ -86,6 +87,7 @@ settings: true
 keyboardFit: true
 tetherCompat: true
 typography: true
+conversationChrome: true      // 宿主会话控件的命中层（只改命中区，不改绘制）
 resumeReconnect: true
 keyboardDebug: false          // 临时诊断，默认关
 toolCards: ['pwsh', 'read', 'grep', 'edit', 'write']
@@ -277,6 +279,9 @@ node tools/verify-splash-warm.mjs $url
 node tools/verify-toolcards.mjs $url <out-dir>
 node tools/verify-title-marquee.mjs $url <out-dir>
 node tools/verify-risk-dialog.mjs $url          # 确认弹层：标题在正文之上、按钮不被卡片裁掉
+node tools/verify-tap-targets.mjs $url          # 插件自己控件的真实命中区（逐像素外扩）
+node tools/verify-conversation-touch.mjs $url   # 宿主会话控件的命中区（消息操作/composer/tab）
+node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```
 

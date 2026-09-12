@@ -259,6 +259,18 @@ export const FEATURES = {
    */
   typography: true,
   /**
+   * Hit layers for the HOST conversation's small controls (message actions,
+   * composer buttons, the 对话/轨迹 tabs).
+   *
+   * Measured at 412x915: those controls paint 26-34px where the touch minimum is
+   * 44, and they are the ones a phone user taps most. This grows only the hit
+   * AREA via a pseudo-element — no size, position or content changes.
+   *
+   * Touches no slot: a stylesheet scoped to `data-slot` anchors, inert above the
+   * phone breakpoint. See `src/client/conversation-chrome.ts`.
+   */
+  conversationChrome: true,
+  /**
    * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
    * can work at all: the live viewport heights, the smallest visual-viewport
    * height seen since load, and event counters.

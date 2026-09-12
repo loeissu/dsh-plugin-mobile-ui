@@ -38,6 +38,7 @@ import { SplashHost } from './Splash.tsx'
 import { ToolCard } from './ToolCard.tsx'
 import { installKeyboardDebug } from './keyboard-debug.ts'
 import { installResumeReconnect } from './connection-recovery.ts'
+import { installConversationChrome } from './conversation-chrome.ts'
 import { installSettingsChrome } from './settings-chrome.ts'
 import { installTetherCompat } from './tether-compat.ts'
 import { installTypography } from './typography.ts'
@@ -128,6 +129,10 @@ export function apply(ctx: ClientContext): void {
     ctx.slots.inject('settings.section', () =>
       ctx.slots.register(SECTION_OPTIONS, SettingsSection))
   }
+
+  // Touch comfort for the host conversation's 26-34px controls; stylesheet only,
+  // and additive like the settings chrome above.
+  if (FEATURES.conversationChrome) installConversationChrome()
 
   // The drawer overlay. `shell.overlay` is a `list`, so this is additive: it
   // sits beside the shipped entries rather than competing with any of them, and
