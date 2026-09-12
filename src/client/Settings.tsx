@@ -69,7 +69,9 @@ const CSS = `
 
 .dsh-mobile-settings__value {
   font-size: ${TYPE.bodySm};
-  color: ${V.textFaint};
+  /* textDim, not textFaint: at 13px the faint ramp is 3.71:1 on the light
+     surface, below WCAG AA 4.5:1. The faint ramp stays on 11px overlines. */
+  color: ${V.textDim};
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -89,7 +91,7 @@ const CSS = `
   background: ${V.border};
   position: relative;
   cursor: pointer;
-  transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+  transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
 }
 
 .dsh-mobile-settings__switch[data-on='true'] { background: ${V.accent}; }
@@ -120,7 +122,7 @@ const CSS = `
   background: transparent;
   color: inherit;
   cursor: pointer;
-  transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+  transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
 }
 
 .dsh-mobile-settings__action:active { background: ${V.active}; }
@@ -142,7 +144,8 @@ const CSS = `
 .dsh-mobile-settings__note {
   font-size: ${TYPE.caption};
   line-height: 1.7;
-  color: ${V.textFaint};
+  /* Same reason as __value: 12px on the faint ramp fails AA in light mode. */
+  color: ${V.textDim};
   padding: 0 4px;
   /* Avoids a lone dangling character on the last wrapped line, which CJK
      footnotes produce easily at this measure. */

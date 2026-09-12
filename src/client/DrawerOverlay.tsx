@@ -190,29 +190,46 @@ const CSS = `
     cursor: pointer;
     pointer-events: auto;
     z-index: 2;
-    transition: color ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: color ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-nav-tab:active { color: ${V.accent}; }
+  /* Touch target. The label paints ~25px tall, which is the only route into the
+     drawer on a phone, so the pseudo-element grows the HIT AREA to 44px without
+     moving the text or changing the tablist layout. Measured room: the host's
+     first tab starts 30px to the right of this label, and the header band is
+     ~90px tall, so -9px vertically and -10px horizontally stay clear. */
+  .dsh-mobile-nav-tab::after {
+    content: '';
+    position: absolute;
+    inset: -9px -10px;
+  }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-nav-tab {
     opacity: 0;
     pointer-events: none;
   }
 
-  /* Make room in the host tablist so 导航 sits before 对话. */
+  /* Make room in the host tablist so 导航 sits before 对话.
+   *
+   * The reserve is MEASURED at runtime (see the effect in the component) because
+   * the label is text: '导航' is 26px at this font while 'Navigation' is 65px. A
+   * hardcoded 56px fits only the Chinese copy and overlaps the host's first tab
+   * in English. 56px stays as the fallback for the first paint and for the case
+   * where the tablist is not in the DOM. */
   @media ${NARROW} {
     [class*="_tabs"][role="tablist"] {
-      padding-left: 56px !important;
+      padding-left: var(--dsh-mobile-nav-reserve, 56px) !important;
     }
   }
 
-  /* Full-viewport scrim (overlay mode). */
+  /* Full-viewport scrim (overlay mode). Paired with the panel: same duration,
+     same curve, so the two halves of the open/close animation finish together. */
   .dsh-mobile-drawer-scrim {
     position: absolute;
     inset: 0;
     background: rgba(0, 0, 0, 0.45);
     opacity: 0;
     pointer-events: none;
-    transition: opacity ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: opacity ${MOTION.sheet} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-drawer-root[data-open='true'] .dsh-mobile-drawer-scrim {
     opacity: 1;
@@ -227,6 +244,10 @@ const CSS = `
     width: min(72%, 300px);
     display: flex;
     flex-direction: column;
+    /* border-radius does not clip descendants, and the footer is an opaque
+       full-width flex child: without this the square footer corner paints over
+       the panel's 30px bottom end-cap and the corner reads as a notch. */
+    overflow: hidden;
     background: ${V.surface};
     color: ${V.text};
     border-right: 0.5px solid ${V.border};
@@ -277,7 +298,7 @@ const CSS = `
     background: transparent;
     color: ${V.textDim};
     cursor: pointer;
-    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-drawer-close:active { background: ${V.active}; }
 
@@ -294,7 +315,7 @@ const CSS = `
     background: transparent;
     color: ${V.accent};
     cursor: pointer;
-    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-drawer-new:active { background: ${V.active}; }
 
@@ -325,7 +346,7 @@ const CSS = `
     font-size: ${TYPE.body};
     text-align: left;
     cursor: pointer;
-    transition: background ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-drawer-settings:active { background: ${V.active}; }
 
@@ -346,8 +367,8 @@ const CSS = `
     font: inherit;
     font-size: ${TYPE.bodySm};
     cursor: pointer;
-    transition: background ${MOTION.base} var(${TOKEN.ease}, ease),
-                color ${MOTION.base} var(${TOKEN.ease}, ease);
+    transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease}),
+                color ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
   }
   .dsh-mobile-drawer-refresh:active { background: ${V.active}; }
   .dsh-mobile-drawer-refresh[data-busy='true'] {
@@ -430,13 +451,18 @@ const CSS = `
     margin: 10px 16px;
   }
 
-  /* Bottom fade marking that the list continues. Sits above the scroll body,
-     inside the panel so it inherits the rounded corner. */
+  /* Bottom fade marking that the list continues.
+   *
+   * Positioned against the footer's TOP edge (bottom: 100%) rather than the
+   * panel's bottom edge. Measured: pinned to the panel it sat at y881..915 while
+   * the opaque footer covers y846..915 at z-index 2, so the gradient was painted
+   * entirely underneath the footer and the affordance never appeared. The footer
+   * is position:relative, so this is its containing block. */
   .dsh-mobile-drawer-more {
     position: absolute;
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: 100%;
     height: 34px;
     pointer-events: none;
     background: linear-gradient(to bottom, transparent, ${V.surface});
@@ -582,7 +608,8 @@ const CSS = `
     align-items: center;
     gap: 6px;
     font-size: ${TYPE.caption};
-    color: ${V.textFaint};
+    /* textDim, not textFaint: 3.71:1 on the light surface fails AA at 12px. */
+    color: ${V.textDim};
     margin-top: 3px;
     /* Ages tick; tabular digits keep the row from wiggling. */
     font-variant-numeric: tabular-nums;
@@ -601,7 +628,7 @@ const CSS = `
     padding: 18px 16px;
     font-size: ${TYPE.caption};
     line-height: 1.7;
-    color: ${V.textFaint};
+    color: ${V.textDim};
   }
 
   @media (prefers-reduced-motion: reduce) {
@@ -771,6 +798,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   // remains. Measured rather than assumed: content that fits shows nothing.
   const bodyRef = useRef<HTMLDivElement | null>(null)
   const panelRef = useRef<HTMLDivElement | null>(null)
+  const tabRef = useRef<HTMLButtonElement | null>(null)
   const [moreBelow, setMoreBelow] = useState(false)
 
   const measureOverflow = useCallback((): void => {
@@ -840,6 +868,60 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     window.addEventListener('keydown', onKey)
     return () => { window.removeEventListener('keydown', onKey) }
   }, [open])
+
+  /**
+   * Reserve room in the host tablist for the 导航 label.
+   *
+   * Measured rather than assumed: the label is text, so its width follows the
+   * locale — 26px for '导航' at this font, 65px for 'Navigation'. The stylesheet
+   * declares `padding-left: var(--dsh-mobile-nav-reserve, 56px)`, and a hardcoded
+   * 56px fits only the Chinese copy: in English the label overlapped the host's
+   * first tab by ~9px.
+   *
+   * The write cannot be one-shot: measured on the live instance, the effect runs
+   * BEFORE the host's tab strip is committed (the overlay is a body child while
+   * the strip lives in the app frame), so a single query found nothing and the
+   * fallback stayed in place. So this keeps a cheap guard on every body mutation
+   * — a `isConnected` test plus a variable read — and re-queries only when the
+   * element is gone or the variable was cleared by a re-mount.
+   */
+  useEffect(() => {
+    const tab = tabRef.current
+    if (tab === null) return
+    const VAR = '--dsh-mobile-nav-reserve'
+    let list: HTMLElement | null = null
+
+    const reserve = (): void => {
+      if (list === null) return
+      const tabBox = tab.getBoundingClientRect()
+      if (tabBox.width === 0) return
+      const offset = tabBox.left - list.getBoundingClientRect().left
+      const value = `${Math.ceil(offset + tabBox.width + 10)}px`
+      if (list.style.getPropertyValue(VAR) !== value) list.style.setProperty(VAR, value)
+    }
+
+    const ensure = (): void => {
+      if (list !== null && list.isConnected && list.style.getPropertyValue(VAR) !== '') { reserve(); return }
+      const found = document.querySelector('[class*="_tabs"][role="tablist"]')
+      list = found instanceof HTMLElement ? found : null
+      reserve()
+    }
+
+    ensure()
+    const sizeObserver = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(ensure)
+    sizeObserver?.observe(tab)
+    // The label reflows when the web font lands, and the host may re-mount the
+    // strip (cheap guard, see the note above).
+    const domObserver = typeof MutationObserver === 'undefined' ? null : new MutationObserver(ensure)
+    domObserver?.observe(document.body, { childList: true, subtree: true })
+    window.addEventListener('resize', ensure)
+    void document.fonts?.ready.then(ensure).catch(() => {})
+    return () => {
+      sizeObserver?.disconnect()
+      domObserver?.disconnect()
+      window.removeEventListener('resize', ensure)
+    }
+  }, [t.drawerTitle])
 
   /**
    * Swipe-left-to-close on the panel body.
@@ -947,6 +1029,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       <button
         type="button"
         className="dsh-mobile-nav-tab"
+        ref={tabRef}
         aria-label={t.drawerOpen}
         aria-expanded={open}
         data-dsh-mobile-ui="drawer-trigger"
@@ -1013,12 +1096,6 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
           </button>
         </div>
 
-        {/* Scroll affordance: shown only while rows remain below the fold, so a
-            list that fits stays clean. Purely decorative and inert to touch. */}
-        {moreBelow
-          ? <div className="dsh-mobile-drawer-more" data-dsh-mobile-ui="drawer-more" aria-hidden="true" />
-          : null}
-
         <div className="dsh-mobile-drawer-body" ref={bodyRef}>
           {/* Workspaces on the connected machine. Not machines: switching
               machines belongs to dsh-tether and is not readable here. */}
@@ -1076,6 +1153,13 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
         </div>
 
         <div className="dsh-mobile-drawer-foot">
+          {/* Scroll affordance: shown only while rows remain below the fold, so a
+              list that fits stays clean. Purely decorative and inert to touch.
+              Anchored to the footer's top edge (bottom: 100%) — pinned to the
+              panel it sat underneath this opaque footer and never showed. */}
+          {moreBelow
+            ? <div className="dsh-mobile-drawer-more" data-dsh-mobile-ui="drawer-more" aria-hidden="true" />
+            : null}
           <span
             className="dsh-mobile-conn-dot"
             data-dsh-mobile-ui="drawer-conn"

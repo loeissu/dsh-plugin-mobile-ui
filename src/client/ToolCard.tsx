@@ -130,7 +130,11 @@ const CSS = `
 .dsh-mobile-tool__detail {
   font-family: ${V.mono};
   font-size: ${TYPE.caption};
-  color: ${V.accent};
+  /* Mixing the accent towards the theme's primary label darkens it in light mode
+     and lightens it in dark mode, so contrast rises in BOTH palettes. Measured
+     before: the plain accent is 4.23:1 on the light card at 12px (below AA),
+     4.66:1 in dark. */
+  color: color-mix(in srgb, ${V.accent} 80%, ${V.text});
   background: ${accentSoft()};
   padding: 1.5px 6px;
   border-radius: ${R.xs};

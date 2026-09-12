@@ -48,10 +48,26 @@ const CSS = `
     width: 32px !important;
     height: 32px !important;
     border-radius: ${R.sm} !important;
+    /* The 32px visual is deliberate (the mobile title row is tight), but the
+       HIT AREA must not shrink with it: this is the only way out of the dialog
+       on a phone. The pseudo-element widens it back to 44px without moving the
+       icon or changing the header layout. */
+    position: relative !important;
+  }
+  [role="dialog"] [class*="_close"]::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
   }
 
   /* ── section nav ─────────────────────────────────────────────────── */
-  [role="dialog"] [class*="_nav"] {
+  /* '> nav', NOT [class*="_nav"]: the suffix _nav is a PREFIX of four other
+     local names in this dialog (_navList, _navCell, _navLabel, _navTitle), so
+     the prefix form also pushed 8px of vertical padding and 10px of side padding
+     onto the list and onto every individual label.
+     Measured before the fix: _navList and _navLabel both carried
+     'padding: 8px 10px 0' from this rule. */
+  [role="dialog"] > nav {
     padding: 8px 10px 0 !important;
     gap: 8px !important;
   }
