@@ -252,6 +252,8 @@ android:windowSoftInputMode="adjustResize"
 - 消掉 `_row` + `_rowText` 双层 padding（行高 ~137→~100）  
 - 主题三列横排（浅色 / 深色 / 跟随系统）  
 - 弹层打开时隐藏顶栏「导航」，避免压标题  
+- **标题行给足高度（`_navTitle` min-height 44px）**：标题行原本只有 22px 高，却放着 32px 的关闭按钮与 28px 的「打开配置文件」——桌面下 nav 是左栏、戳出去没东西可撞，**手机上 tether 把 nav 变成标题下方的横排 tab 条，两个按钮就直接压在那条上**（实测重叠 18px，× 盖住被选中的「移动端」胶囊）。不是把控件改小，而是把行高还给它，关闭按钮的 44px 命中层保持不变
+- **五个 tab 必须在 392px 内放得下（不横滚）**：授权间距下五格共需 **453px** → 横滚，而选中的是最后一格（本插件的「移动端」）时条带会滚到右端，**最左的「通用设置」被裁成「设置」**。只回收间距、不动字号与内容：格子 padding 11→7px（−40）、图标与文字间距 8→4px（−20）、条带 gap 4→2px（−8）→ **实测 392/392，五格共 377px，无滚动**，13px 文字与 16px 图标原样保留
 
 ### 本插件「移动端」页
 
@@ -288,6 +290,8 @@ node tools/verify-risk-dialog.mjs $url          # 确认弹层：标题在正文
 node tools/verify-tap-targets.mjs $url          # 插件自己控件的真实命中区（逐像素外扩）
 node tools/verify-conversation-touch.mjs $url   # 宿主会话控件的命中区（消息操作/composer/tab）
 node tools/verify-conversation-chrome.mjs $url  # 会话标题空间 + 底部指标行不裁字（412/360）
+node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行控件不压 tab 条、五个 tab 不需横滚
+node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时给出「重新加载」
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```

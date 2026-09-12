@@ -44,6 +44,19 @@ const CSS = `
     font-weight: 600 !important;
     line-height: 22px !important;
   }
+  /* Give the title row the height its own controls need.
+   *
+   * Measured: the row is 22px tall while it holds a 32px close button and a 28px
+   * 打开配置文件 button, so both overflow ~18px below it. On desktop that is
+   * invisible — the nav is a left-hand column with nothing underneath. On a phone
+   * tether turns the nav into a horizontal strip directly below, so the two buttons
+   * land ON the tab strip: the × covered the selected 移动端 pill in the reported
+   * screenshot. Fixing the row's height is the honest fix; shrinking the controls
+   * again would take the close button under the touch minimum. */
+  [role="dialog"] [class*="_navTitle"] {
+    min-height: 44px !important;
+    align-items: center !important;
+  }
   [role="dialog"] [class*="_close"] {
     width: 32px !important;
     height: 32px !important;
@@ -71,11 +84,21 @@ const CSS = `
     padding: 8px 10px 0 !important;
     gap: 8px !important;
   }
+  /* Five tabs have to fit 392px without horizontal scrolling.
+   *
+   * Measured at 412: the authored spacing wants 453px for the five cells, so the
+   * strip scrolls and — because the selected tab is scrolled into view — the FIRST
+   * one is clipped: 通用设置 rendered as 设置 in the reported screenshot. The
+   * reclaimed 68px comes from spacing only, never from type size or content:
+   * cell padding 11 -> 7px (-40), the icon/label gap 8 -> 4px (-20), and the list
+   * gap 4 -> 2px (-8). Measured after: 385px of 392, so the row is complete and
+   * still, with 13px labels and the 16px icons untouched. */
   [role="dialog"] [class*="_navList"] {
-    gap: 4px !important;
+    gap: 2px !important;
   }
   [role="dialog"] [class*="_navCell"] {
-    padding: 6px 11px !important;
+    padding: 6px 7px !important;
+    gap: 4px !important;
     min-height: 32px !important;
     border-radius: ${R.md} !important;
   }
