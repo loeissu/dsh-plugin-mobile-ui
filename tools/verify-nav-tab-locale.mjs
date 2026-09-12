@@ -1,11 +1,13 @@
 /**
- * Verify the 导航 tab never overlaps the host's first tab, in ANY label width.
+ * Verify the 导航 tab never overlaps the host's first tab, in ANY label width, and
+ * that the three labels space evenly.
  *
  * The reservation for the label is measured at runtime (`--dsh-mobile-nav-reserve`)
  * because the label is text: '导航' is 26px at this font and 'Navigation' is 65px.
- * A hardcoded 56px fits the Chinese copy and overlapped the host tab by ~9px in
- * English, so this drives both widths — the English one by relabelling the button
- * for a moment rather than changing the locale setting.
+ * It is the label width PLUS the host's own inter-tab gap, so 导航 / 对话 / 轨迹
+ * keep the SAME 36px spacing the host uses between its own two tabs (the host's
+ * tablist carries a 36px column gap; the earlier hand-picked 10px left the row
+ * visibly off-rhythm).
  *
  * Usage: node tools/verify-nav-tab-locale.mjs <url>
  */
@@ -34,12 +36,16 @@ const MEASURE = `(() => {
   const list = document.querySelector('[class*="_tabs"][role="tablist"]')
   if (!tab || !list) return JSON.stringify({ missing: !tab ? 'tab' : 'tablist' })
   const tb = tab.getBoundingClientRect()
-  const hostLeft = Math.min(...[...document.querySelectorAll('[role="tab"]')].map((e) => e.getBoundingClientRect().left))
+  const host = [...document.querySelectorAll('[role="tab"]')].map((e) => e.getBoundingClientRect())
+  const hostLeft = Math.min(...host.map((h) => h.left))
+  const hostGap = host.length > 1 ? Math.round(host[1].left - host[0].right) : null
   return JSON.stringify({
     label: (tab.textContent || '').trim(),
     tabRight: Math.round(tb.right),
     hostFirstLeft: Math.round(hostLeft),
     clearance: Math.round(hostLeft - tb.right),
+    navGap: Math.round(hostLeft - tb.right),
+    hostGap,
     reserve: list.style.getPropertyValue('--dsh-mobile-nav-reserve').trim() || '(fallback)',
     padLeft: getComputedStyle(list).paddingLeft,
   })
@@ -55,6 +61,9 @@ console.log('current locale:', JSON.stringify(zh))
 check(zh.missing === undefined, '导航 tab and host tablist are both present')
 check(zh.reserve !== '(fallback)', 'the reservation is measured, not the 56px fallback', `reserve=${zh.reserve} pad=${zh.padLeft}`)
 check(zh.clearance >= 4, 'the label clears the host first tab', `clearance=${zh.clearance}px`)
+check(zh.hostGap !== null && Math.abs(zh.navGap - zh.hostGap) <= 1,
+  '导航 / 对话 / 轨迹 are evenly spaced (gap equals the host\'s own)',
+  `nav→对话 ${zh.navGap}px vs 对话→轨迹 ${zh.hostGap}px`)
 
 const en = JSON.parse(await ev(`(async () => {
   const tab = document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')
@@ -69,6 +78,8 @@ const en = JSON.parse(await ev(`(async () => {
 console.log('simulated EN  :', JSON.stringify(en))
 check(en.missing === undefined, 'EN label keeps both elements present')
 check(en.clearance >= 4, 'the wider EN label still clears the host first tab', `clearance=${en.clearance}px (was -9 before the fix)`)
+check(en.hostGap !== null && Math.abs(en.navGap - en.hostGap) <= 1,
+  'the EN label keeps the same even spacing', `nav→对话 ${en.navGap}px vs 对话→轨迹 ${en.hostGap}px`)
 check(en.reserve !== zh.reserve, 'the reservation follows the label width', `zh=${zh.reserve} en=${en.reserve}`)
 
 const restored = JSON.parse(await ev(MEASURE))

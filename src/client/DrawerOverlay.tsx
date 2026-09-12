@@ -180,7 +180,10 @@ const CSS = `
   }
 
   /* Primary open control: a text tab matching 对话 / 轨迹, sitting left of
-     that tablist. The host tablist is padded so the three read as one row. */
+     that tablist. The host tablist is padded so the three read as one row with
+     the SAME 36px gap between neighbours, and this label is a step heavier than
+     the host's 500 so the entry point is legible at a glance (measured: all three
+     labels are 13px). */
   .dsh-mobile-nav-tab {
     position: absolute;
     /* Aligns with the host tablist (measured top≈50px at phone width). */
@@ -193,7 +196,7 @@ const CSS = `
     background: transparent;
     font: inherit;
     font-size: ${TYPE.bodySm};
-    font-weight: 500;
+    font-weight: 600;
     line-height: 16px;
     color: ${V.textDim};
     cursor: pointer;
@@ -217,16 +220,19 @@ const CSS = `
     pointer-events: none;
   }
 
-  /* Make room in the host tablist so 导航 sits before 对话.
+  /* Make room in the host tablist so 导航 sits before 对话 with the same gap the
+   * host uses between its own tabs.
    *
-   * The reserve is MEASURED at runtime (see the effect in the component) because
-   * the label is text: '导航' is 26px at this font while 'Navigation' is 65px. A
-   * hardcoded 56px fits only the Chinese copy and overlaps the host's first tab
-   * in English. 56px stays as the fallback for the first paint and for the case
-   * where the tablist is not in the DOM. */
+   * Measured at 412: the host's tablist carries a 36px column gap, so 对话 and
+   * 轨迹 sit 36px apart while the hand-picked 10px reserve left 导航 only 10px
+   * from 对话 — visibly a different rhythm. The reserve is therefore the label
+   * width plus the HOST's own gap, read at runtime (see the effect), because the
+   * label is text: '导航' is 26px at this font while 'Navigation' is 65px. The
+   * fallback keeps the same 36px rhythm for the first paint and for the case where
+   * the tablist is not in the DOM. */
   @media ${NARROW} {
     [class*="_tabs"][role="tablist"] {
-      padding-left: var(--dsh-mobile-nav-reserve, 56px) !important;
+      padding-left: var(--dsh-mobile-nav-reserve, 62px) !important;
     }
   }
 
@@ -967,18 +973,18 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   /**
    * Reserve room in the host tablist for the 导航 label.
    *
-   * Measured rather than assumed: the label is text, so its width follows the
-   * locale — 26px for '导航' at this font, 65px for 'Navigation'. The stylesheet
-   * declares `padding-left: var(--dsh-mobile-nav-reserve, 56px)`, and a hardcoded
-   * 56px fits only the Chinese copy: in English the label overlapped the host's
-   * first tab by ~9px.
+   * The reserve is the label's width PLUS the host's own gap between its tabs, so
+   * 导航 / 对话 / 轨迹 read as one evenly spaced row. Measured at 412: all three
+   * labels are 13px, the host's tablist carries `column-gap: 36px` (对话 and 轨迹
+   * sit 36px apart), and the old hand-picked 10px left 导航 visibly off-rhythm.
    *
-   * The write cannot be one-shot: measured on the live instance, the effect runs
-   * BEFORE the host's tab strip is committed (the overlay is a body child while
-   * the strip lives in the app frame), so a single query found nothing and the
-   * fallback stayed in place. So this keeps a cheap guard on every body mutation
-   * — a `isConnected` test plus a variable read — and re-queries only when the
-   * element is gone or the variable was cleared by a re-mount.
+   * Measured rather than assumed in two ways: the label is text (26px for '导航',
+   * 65px for 'Navigation'), and the gap is the host's (read from `column-gap`, with
+   * a measurement between the host's own tabs as a fallback). The write cannot be
+   * one-shot either: the host's tab strip is committed AFTER this overlay mounts,
+   * so a single query found nothing and the fallback stayed live — hence the cheap
+   * guard on body mutations below, which re-queries only when the element is gone
+   * or the variable was cleared.
    */
   useEffect(() => {
     const tab = tabRef.current
@@ -986,12 +992,24 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     const VAR = '--dsh-mobile-nav-reserve'
     let list: HTMLElement | null = null
 
+    /** The host's own inter-tab gap, so the three labels space evenly. */
+    const hostGap = (target: HTMLElement): number => {
+      const fromStyle = Number.parseFloat(getComputedStyle(target).columnGap)
+      if (Number.isFinite(fromStyle) && fromStyle > 0) return fromStyle
+      const tabs = [...target.querySelectorAll('[role="tab"]')]
+      if (tabs.length > 1) {
+        const measured = tabs[1].getBoundingClientRect().left - tabs[0].getBoundingClientRect().right
+        if (measured > 0) return measured
+      }
+      return 36
+    }
+
     const reserve = (): void => {
       if (list === null) return
       const tabBox = tab.getBoundingClientRect()
       if (tabBox.width === 0) return
       const offset = tabBox.left - list.getBoundingClientRect().left
-      const value = `${Math.ceil(offset + tabBox.width + 10)}px`
+      const value = `${Math.ceil(offset + tabBox.width + hostGap(list))}px`
       if (list.style.getPropertyValue(VAR) !== value) list.style.setProperty(VAR, value)
     }
 
