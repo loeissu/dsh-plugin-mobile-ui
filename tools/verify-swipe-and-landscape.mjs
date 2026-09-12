@@ -112,12 +112,14 @@ const land = JSON.parse(await ev(`(() => {
   const sidebar = document.querySelector('[data-slot="root"] > [class*="_frame"] > [class*="sidebarCol"]')
   const frame = document.querySelector('[data-slot="root"] > [class*="_frame"]')
   const de = document.documentElement
+  const sep = document.querySelector('[data-slot="conversation.session.header"] [class*="_separator"]')
   return JSON.stringify({
     media: { phone: matchMedia('(max-width: 768px), (max-height: 520px) and (pointer: coarse)').matches, coarse: matchMedia('(pointer: coarse)').matches },
     drawerVisible: vis(drawer), navTabVisible: vis(navTab),
     sidebarX: sidebar ? Math.round(sidebar.getBoundingClientRect().left) : null,
     frameGrid: frame ? getComputedStyle(frame).gridTemplateColumns : null,
     pageScroll: [de.scrollWidth, de.clientWidth],
+    separatorDisplay: sep ? getComputedStyle(sep).display : null,
   })
 })()`))
 console.log('  ' + JSON.stringify(land))
@@ -127,6 +129,13 @@ check(land.drawerVisible === true, 'the mobile drawer is available in landscape'
 check(land.navTabVisible === true, 'so is the 导航 entry', `navTabVisible=${land.navTabVisible}`)
 check(land.sidebarX !== null && land.sidebarX <= -1000, 'the native sidebar is parked off-viewport', `left=${land.sidebarX}`)
 check(land.pageScroll[0] <= land.pageScroll[1] + 1, 'the landscape layout does not scroll sideways', `scrollWidth ${land.pageScroll[0]} vs ${land.pageScroll[1]}`)
+// The content-hiding rules are width-only: a 915px-wide row has room, so the header
+// keeps what the narrow layout hides. The separator is session-state dependent (it
+// exists only while the session has subagents), so absence is reported rather than
+// failed — the requirement is "not hidden by us".
+check(land.separatorDisplay === null || land.separatorDisplay !== 'none',
+  'landscape does not hide the header content the narrow layout hides',
+  `separator display=${land.separatorDisplay}${land.separatorDisplay === null ? ' (not present in this session)' : ''}`)
 
 // The touch layers must be active here too: message actions reach 44px. The row
 // belongs to a message, and in a 412px-tall landscape viewport the transcript can
@@ -160,7 +169,30 @@ const dialog = JSON.parse(await ev(`(() => {
   return JSON.stringify({ painted: [Math.round(b.width), Math.round(b.height)], reach: Math.round(b.height) + up + down })
 })()`))
 console.log('  settings close:', JSON.stringify(dialog))
-check(dialog.missing === undefined && dialog.reach >= 43, 'the settings close button keeps a touch target in landscape', JSON.stringify(dialog))
+check(dialog.missing === undefined && dialog.reach >= 44, 'the settings close button keeps a touch target in landscape', JSON.stringify(dialog))
+
+// While the dialog is up, the drawer's 导航 label must be out of the way: in
+// landscape its root (z-index 2147482000) beats the parked column that hosts the
+// dialog (40), so a suppression rule gated on width alone left it painting OVER the
+// modal and swallowing taps inside its 45x45 hit box.
+const suppressed = JSON.parse(await ev(`(() => {
+  const tab = document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')
+  if (!tab) return JSON.stringify({ missing: true })
+  const b = tab.getBoundingClientRect()
+  const x = Math.round(b.left + b.width / 2)
+  const y = Math.round(b.top + b.height / 2)
+  const at = document.elementFromPoint(x, y)
+  return JSON.stringify({
+    opacity: getComputedStyle(tab).opacity,
+    pointerEvents: getComputedStyle(tab).pointerEvents,
+    reachable: at === tab || (at !== null && tab.contains(at)),
+    dialogOpen: document.querySelector('[role="dialog"]') !== null,
+  })
+})()`))
+console.log('  nav tab while the modal is up:', JSON.stringify(suppressed))
+check(suppressed.dialogOpen === true, 'the modal really is open for this check', `dialogOpen=${suppressed.dialogOpen}`)
+check(suppressed.reachable === false, 'the 导航 label does not intercept taps meant for the modal', `reachable=${suppressed.reachable}`)
+check(suppressed.opacity === '0', 'and it is not painted over the modal', `opacity=${suppressed.opacity}`)
 
 await send('Emulation.setTouchEmulationEnabled', { enabled: false })
 await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2, mobile: true })

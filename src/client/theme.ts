@@ -264,7 +264,11 @@ const OWNED_STYLES = new Set<string>()
 export function injectStyles(id: string, css: string): void {
   if (typeof document === 'undefined') return
   const tagId = `dsh-mobile-ui/${id}`
-  if (OWNED_STYLES.has(tagId) || document.querySelector(`style[data-plugin-css="${tagId}"]`) !== null) {
+  // Ownership is judged by the DOCUMENT, not by this Set: if the host (or an HMR
+  // teardown) removed the tag, re-installing must put it back. Trusting the Set
+  // alone made a re-install silently skip the sheet, leaving the plugin running
+  // with none of its own CSS — the failure mode is "unstyled, no error".
+  if (document.querySelector(`style[data-plugin-css="${tagId}"]`) !== null) {
     OWNED_STYLES.add(tagId)
     return
   }

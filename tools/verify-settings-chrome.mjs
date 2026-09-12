@@ -40,19 +40,8 @@ await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, devi
 await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
-await ev(`document.querySelector('[data-slot="sidebar.settings"] button')?.click()`)
-await sleep(900)
-// Select the LAST tab: that is the case that scrolls the strip in the host's own
-// behaviour if the five cells do not fit.
-await ev(`(() => {
-  const cells = [...document.querySelectorAll('[role="dialog"] [class*="_navCell"]')]
-  const last = cells[cells.length - 1]
-  if (last) last.click()
-  return cells.length
-})()`)
-await sleep(800)
-
-const m = JSON.parse(await ev(`(() => {
+/** Measure the dialog at whatever size the emulation is currently set to. */
+const measure = async () => JSON.parse(await ev(`(() => {
   const r = (e) => { if (!e) return null; const b = e.getBoundingClientRect()
     return { x: Math.round(b.left), y: Math.round(b.top), w: Math.round(b.width), h: Math.round(b.height), right: Math.round(b.right), bottom: Math.round(b.bottom) } }
   const d = document.querySelector('[role="dialog"]')
@@ -62,46 +51,71 @@ const m = JSON.parse(await ev(`(() => {
   const close = d.querySelector('[class*="_close"]')
   const openConfig = [...d.querySelectorAll('button')].find((b) => /配置文件/.test(b.textContent || ''))
   const cells = [...d.querySelectorAll('[class*="_navCell"]')]
-  const hits = (x, y) => { const el = document.elementFromPoint(x, y); return el === close || (el !== null && close !== null && close.contains(el)) }
-  let reach = 0
-  if (close) {
-    const b = close.getBoundingClientRect()
-    reach = 0
-    let n = 0
-    while (n < 30 && hits(b.left + b.width / 2, b.top - n - 1)) n += 1
-    let d2 = 0
-    while (d2 < 30 && hits(b.left + b.width / 2, b.bottom + d2 + 1)) d2 += 1
-    reach = Math.round(b.height) + n + d2
-  }
+  const strip = list ? getComputedStyle(list).flexDirection === 'row' : false
   return JSON.stringify({
+    vw: innerWidth, strip,
     title: r(title), list: r(list), close: r(close), openConfig: r(openConfig),
-    cells: cells.map((c) => ({ t: (c.textContent || '').trim().slice(0, 8), rect: r(c) })),
+    cells: cells.length,
     listScroll: list ? [list.scrollWidth, list.clientWidth, list.scrollLeft] : null,
-    closeReach: reach,
-    dialogs: 1,
+    firstClipped: cells.length && list ? cells[0].getBoundingClientRect().left < list.getBoundingClientRect().left - 1 : null,
+    lastInside: cells.length && list ? cells[cells.length - 1].getBoundingClientRect().right <= list.getBoundingClientRect().right + 1 : null,
   })
 })()`))
 
-if (m.missing === true) { console.log('FAIL  settings dialog did not open'); process.exit(1) }
-console.log(JSON.stringify({ title: m.title, list: m.list, close: m.close, openConfig: m.openConfig, listScroll: m.listScroll, closeReach: m.closeReach }))
-console.log('cells:', JSON.stringify(m.cells.map((c) => `${c.t} ${c.rect.w}px`)))
+// Every phone width the plugin claims to support, not just the one that was reported.
+for (const width of [320, 360, 412, 430]) {
+  await send('Emulation.setDeviceMetricsOverride', { width, height: 915, deviceScaleFactor: 2, mobile: true })
+  await sleep(900)
+  await ev(`document.querySelector('[data-slot="sidebar.settings"] button')?.click()`)
+  await sleep(900)
+  // Select the LAST tab: that is the case that scrolls the strip in the host's own
+  // behaviour if the five cells do not fit.
+  await ev(`(() => {
+    const cells = [...document.querySelectorAll('[role="dialog"] [class*="_navCell"]')]
+    const last = cells[cells.length - 1]
+    if (last) last.click()
+    return cells.length
+  })()`)
+  await sleep(700)
 
-const stripTop = m.list.y
-check(m.close.bottom <= stripTop, 'the close button does not reach the tab strip', `close ends ${m.close.bottom}, strip starts ${stripTop}`)
-check(m.openConfig.bottom <= stripTop, '打开配置文件 does not reach the tab strip', `ends ${m.openConfig.bottom}, strip starts ${stripTop}`)
-check(m.title.h >= 44, 'the title row has room for its own controls', `height ${m.title.h}px (was 22)`)
+  const m = await measure()
+  console.log(`\n@${width}: ${JSON.stringify({ title: m.title, list: m.list, cells: m.cells, listScroll: m.listScroll, firstClipped: m.firstClipped, lastInside: m.lastInside })}`)
+  if (m.missing === true) { check(false, `@${width} the settings dialog opens`); continue }
+  const stripTop = m.list.y
+  check(m.close.bottom <= stripTop, `@${width} the close button does not reach the tab strip`, `close ends ${m.close.bottom}, strip starts ${stripTop}`)
+  check(m.openConfig.bottom <= stripTop, `@${width} 打开配置文件 does not reach the tab strip`, `ends ${m.openConfig.bottom}, strip starts ${stripTop}`)
+  check(m.title.h >= 44, `@${width} the title row has room for its own controls`, `height ${m.title.h}px`)
+  check(m.listScroll[0] <= m.listScroll[1] + 1, `@${width} the five tabs fit without horizontal scrolling`,
+    `content ${m.listScroll[0]}px in ${m.listScroll[1]}px`)
+  check(m.lastInside === true, `@${width} the last tab is fully inside the strip`, `lastInside=${m.lastInside}`)
+  check(m.firstClipped === false, `@${width} the first tab is not clipped at the left edge`, `firstClipped=${m.firstClipped}`)
+  check(m.listScroll[2] <= 1, `@${width} the strip is not scrolled`, `scrollLeft ${m.listScroll[2]}`)
+  if (m.strip) check(m.cells === 5, `@${width} all five sections are present`, `${m.cells} cells`)
 
-check(m.listScroll[0] <= m.listScroll[1] + 1, 'the five tabs fit without horizontal scrolling',
-  `content ${m.listScroll[0]}px in ${m.listScroll[1]}px (was 453)` )
-const last = m.cells[m.cells.length - 1]
-const first = m.cells[0]
-check(last.rect.right <= m.list.right + 1, 'the last tab is fully inside the strip', `ends ${last.rect.right}, strip ends ${m.list.right}`)
-check(first.rect.x >= m.list.x, 'the first tab is not clipped at the left edge', `starts ${first.rect.x}, strip starts ${m.list.x}`)
-check(m.listScroll[2] <= 1, 'the strip is not scrolled', `scrollLeft ${m.listScroll[2]}`)
-check(m.closeReach >= 40, 'the close button keeps a usable reach', `${m.closeReach}px tall by pixel walk`)
+  await ev(`[...document.querySelectorAll('[role="dialog"] button')].find(b => /关闭/.test(b.getAttribute('aria-label') || ''))?.click()`)
+  await sleep(400)
+}
+
+// The close button's own reach, measured once at phone width.
+await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2, mobile: true })
+await sleep(700)
+await ev(`document.querySelector('[data-slot="sidebar.settings"] button')?.click()`)
+await sleep(900)
+const closeReach = await ev(`(() => {
+  const close = document.querySelector('[role="dialog"] [class*="_close"]')
+  if (!close) return -1
+  const b = close.getBoundingClientRect()
+  const hits = (x, y) => { const el = document.elementFromPoint(x, y); return el === close || (el !== null && close.contains(el)) }
+  let up = 0; while (up < 30 && hits(b.left + b.width / 2, b.top - up - 1)) up += 1
+  let down = 0; while (down < 30 && hits(b.left + b.width / 2, b.bottom + down + 1)) down += 1
+  return Math.round(b.height) + up + down
+})()`)
+console.log(`\nclose reach by pixel walk: ${closeReach}px`)
+check(closeReach >= 40, 'the close button keeps a usable reach', `${closeReach}px tall`)
 
 ws.close()
 console.log('')
 if (failures.length > 0) { console.log(`RESULT: ${failures.length} FAILED`); process.exit(1) }
-console.log('RESULT: host settings dialog fits the phone without the controls colliding with the tab strip')
+console.log('RESULT: host settings dialog fits every phone width without the controls colliding with the tab strip')
 process.exit(0)
+

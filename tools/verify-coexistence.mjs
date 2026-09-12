@@ -109,7 +109,14 @@ const MEASURE = `(() => {
     panelBorderRadius: cs.borderRadius,
     panelRole: panel.getAttribute('role'),
     frameTemplate: frame ? getComputedStyle(frame).gridTemplateColumns : 'no-frame',
+    // The sidebar is PARKED, not display:none — ui-settings mounts its modal inside
+    // this column and a display:none ancestor unpaints it entirely, which made
+    // "settings from the drawer" a silent no-op. So the assertion is about effective
+    // invisibility: off-viewport, not hit-testable, and no longer holding a track.
     sidebarDisplay: frame ? getComputedStyle(frame.querySelector(':scope > [class*="sidebarCol"]')).display : 'n/a',
+    sidebarLeft: frame ? Math.round(frame.querySelector(':scope > [class*="sidebarCol"]').getBoundingClientRect().left) : null,
+    sidebarPosition: frame ? getComputedStyle(frame.querySelector(':scope > [class*="sidebarCol"]')).position : null,
+    sidebarPointerEvents: frame ? getComputedStyle(frame.querySelector(':scope > [class*="sidebarCol"]')).pointerEvents : null,
   }, null, 1)
 })()`
 
@@ -161,10 +168,17 @@ check(!(together.panelRole === 'dialog'),
 check(together.panelBorderRadius !== '0px',
   'panel keeps its own corner radius', `border-radius=${together.panelBorderRadius}`)
 
-// The grid override must still beat tether's, which is lower specificity.
-check(together.sidebarDisplay === 'none',
-  'native sidebar stays hidden despite tether restating the template',
-  `sidebar display=${together.sidebarDisplay}`)
+// The rail must be out of the way even though tether restates the frame template.
+// Measured form of "out of the way": parked off-viewport (left <= -1000), not
+// interactive (pointer-events none), and no longer occupying a grid track (the
+// template check right below). A `display: none` expectation was written when the
+// drawer hid the column outright; that approach broke the settings modal and is no
+// longer what ships.
+check(together.sidebarLeft !== null && together.sidebarLeft <= -1000,
+  'native sidebar stays parked off-viewport despite tether restating the template',
+  `sidebar left=${together.sidebarLeft} display=${together.sidebarDisplay}`)
+check(together.sidebarPointerEvents === 'none',
+  'and it does not intercept taps', `pointer-events=${together.sidebarPointerEvents}`)
 check(/^412px 0px$/.test(together.frameTemplate) || /minmax/.test(together.frameTemplate),
   'this plugin grid override wins over tether lower-specificity rule',
   `template=${together.frameTemplate}`)

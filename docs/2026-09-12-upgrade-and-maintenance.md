@@ -1,4 +1,4 @@
-# 升级与维护手册
+﻿# 升级与维护手册
 
 **日期**：2026-09-12
 **适用**：`dsh-plugin-mobile-ui` 0.1.0
@@ -16,7 +16,7 @@
 | 构建产物 | `lib/client.js`（约 105 KB）+ `lib/index.js` | **不入 git**，由 `npm run bundle` 生成；DSH 每请求从磁盘读 `lib/client.js` |
 | 线上部署 | profile `web`（`~/.dsh/profiles/web`） | `package.json` 里是 `"dsh-plugin-mobile-ui": "link:H:/DSH/_work/repo/dsh-plugin-mobile-ui"`，`node_modules` 里是 **junction**；即"仓库源码 = 线上插件" |
 | 无浏览器契约检查 | `verify-bundle.mjs` | `npm run verify` 会在 Node 里模拟 loader，校验注册/渲染契约 |
-| 浏览器验收脚本 | `tools/`（34 个） | `probe-*.mjs` 一次性探针；`verify-*.mjs` 是回归套件，需 3080 + Chrome `:9222` + token |
+| 浏览器验收脚本 | `tools/`（73 个：30 个回归套件 + 探针；`retired/` 另存已放弃设计） | `probe-*.mjs` 一次性探针；`verify-*.mjs` 是回归套件，需 3080 + Chrome `:9222` + token |
 | 文档 | `docs/` | 现状总说明看 `MOBILE-UI-GUIDE.md`，逐场日志看 `2026-09-11-session-log.md` |
 | **未交付** | 原生 APK | 原生启动屏与 `windowSoftInputMode` 根治都需要重新出包；本机缺 MSVC / `link.exe`，出不了包（见 §6） |
 
@@ -138,9 +138,9 @@ keyed slot "tool.call.toolview" already has an entry for key "read" at priority 
 
 ## 5. 维护成本
 
-- 源码 **3792 行 / 15 个文件**；最大单文件 `DrawerOverlay.tsx` **1085 行**（欠账 P2-9：待拆分）。
+- 源码 **4799 行 / 16 个文件**；最大单文件 `DrawerOverlay.tsx` **1467 行**（欠账 P2-9：待拆分）。
 - 设计面收敛得比较好：`theme.ts` 统一 `TYPE`/`R`/`MOTION` token，颜色全走 `--dsw-alias-*`；`config.ts` 一个 `FEATURES` 表 + zh/en 文案，关功能不用改组件。
-- 验证：`verify-bundle.mjs`（离线、无浏览器）+ 69 个 `tools/` 脚本（其中 27 个 `verify-*.mjs` 回归套件）。**没有单元测试、没有 CI**。
+- 验证：`verify-bundle.mjs`（离线、无浏览器）+ 73 个 `tools/` 脚本（其中 30 个 `verify-*.mjs` 回归套件）。**没有单元测试、没有 CI**。
 - 无 adb / 无真机自动化：**触摸、IME、tether 真机宽度都没在 CI 验证过**，只能真机定论。
 - `ctx.locale` 未接，文案按 `navigator.language`。
 - `keyboard-debug.ts` 是临时诊断，默认关，问题定性后可删。

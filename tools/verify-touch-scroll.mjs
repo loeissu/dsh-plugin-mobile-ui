@@ -77,12 +77,21 @@ await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
 // ── control: the conversation transcript, which is known to scroll ──────────
+// Two preconditions, both learned the hard way:
+//  - touch emulation must be ON, or the synthetic touch stream is not a touch input
+//    source and no native scroll ever starts;
+//  - the control must be at the TOP of its range, because the gesture drags content
+//    upward (scrollTop increases) and a transcript parked at the bottom of a long
+//    session cannot move — that is what made this control report "no scroll" and
+//    stopped the run before it ever reached the drawer.
+await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
 const control = JSON.parse(await evaluate(`(() => {
   const el = [...document.querySelectorAll('*')].find((e) => {
     const s = getComputedStyle(e)
     return (s.overflowY === 'auto' || s.overflowY === 'scroll') && e.scrollHeight > e.clientHeight + 40
   })
   if (!el) return JSON.stringify({ found: false })
+  el.scrollTop = 0
   const r = el.getBoundingClientRect()
   el.setAttribute('data-probe-control', '1')
   return JSON.stringify({ found: true, cls: (el.className || '').toString().split(' ')[0].slice(0, 34), x: Math.round(r.x + r.width / 2), y: Math.round(r.bottom - 40), overflow: el.scrollHeight - el.clientHeight, scrollTop: Math.round(el.scrollTop) })

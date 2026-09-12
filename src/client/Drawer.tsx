@@ -66,7 +66,14 @@ export const DRAWER_CHILDREN = {
 /** Keys of {@link DRAWER_CHILDREN}. */
 export type DrawerChildKey = keyof typeof DRAWER_CHILDREN
 
-const STYLE_ID = 'drawer'
+/**
+ * Sheet id. NOT 'drawer': DrawerOverlay owns that id, and `injectStyles` is
+ * id-deduped, so sharing it meant only the FIRST sheet was ever injected — enabling
+ * this takeover would have rendered an unstyled column with no error. (The takeover
+ * itself is off by default and conflicts with the project's sidebar constraint; see
+ * docs/drawer-takeover.md.)
+ */
+const STYLE_ID = 'drawer-takeover'
 
 const CSS = `
 .dsh-mobile-drawer {

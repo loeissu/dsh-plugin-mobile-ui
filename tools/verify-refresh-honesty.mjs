@@ -113,13 +113,18 @@ check(dead.label === '重新加载', 'the button offers a reload instead of a us
 check(dead.dot === 'dead', 'the dot shows the third state', `dot=${dead.dot}`)
 check(dead.announce === '链路已断', 'the state is announced as text', `announce=${dead.announce}`)
 
-console.log('\n## 3. and it recovers when the host answers again')
-await ev(`(() => { window.fetch = window.__realFetch; return 'restored' })()`)
+console.log('\n## 3. and a tap on the dead state re-probes before escalating')
+await ev(`(() => { window.fetch = window.__realFetch; window.__noReload = true; return 'restored' })()`)
+// With the host answering again, a tap must clear the dead state WITHOUT reloading:
+// a reload would throw away the draft and the streaming turn, so it is the
+// escalation for a link that is still unreachable, not the first move.
 await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-refresh"]').click()`)
 await sleep(2500)
 const back = await ui()
-console.log('  after restore:', JSON.stringify(back))
-check(back.dead === 'false' && back.label === '刷新连接', 'a later healthy refresh clears the dead state', JSON.stringify(back))
+const stillHere = await ev(`window.__noReload === true`)
+console.log('  after restore:', JSON.stringify(back), 'same document:', stillHere)
+check(back.dead === 'false' && back.label === '刷新连接', 'a tap on the dead state clears it once the host answers', JSON.stringify(back))
+check(stillHere === true, 'and it did so without reloading the page', `same document=${stillHere}`)
 
 ws.close()
 console.log('')

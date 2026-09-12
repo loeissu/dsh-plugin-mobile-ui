@@ -71,6 +71,7 @@ export function installKeyboardDebug(): () => void {
   el.setAttribute('data-dsh-mobile-ui', 'keyboard-debug')
   // Tap to hide, so it never becomes an obstacle on a small screen.
   el.addEventListener('click', () => { el.remove() })
+  if (document.body === null) return () => {}
   document.body.append(el)
 
   const counts = { vvResize: 0, vvScroll: 0, winResize: 0, focus: 0 }

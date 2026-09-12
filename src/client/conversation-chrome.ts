@@ -26,14 +26,26 @@ import { injectStyles, PHONE_MEDIA, TYPE } from './theme.ts'
 const STYLE_ID = 'conversation-chrome'
 
 /**
- * The plugin's phone condition, landscape included.
+ * The plugin's phone condition, landscape included — for the HIT LAYERS only.
  *
- * These are hit layers only — no size, position or content changes — so applying
- * them to a phone held sideways (wide but short, coarse pointer) is exactly as safe
- * as applying them in portrait. Without it a landscape phone loses every 44px target
- * this module exists to provide, because the desktop layout comes back above 768px.
+ * These rules grow a control's touch area with a pseudo-element and change no size,
+ * position or content, so a phone held sideways (wide but short, coarse pointer)
+ * needs them exactly as much as one held upright. Without it a landscape phone loses
+ * every 44px target this module exists to provide, because the desktop layout comes
+ * back above 768px.
  */
 const NARROW = PHONE_MEDIA
+
+/**
+ * Layout changes stay width-only.
+ *
+ * The rules under this condition HIDE host content (the decorative separator, the
+ * duplicated access-mode label) and restructure the dock row — all of which were
+ * justified by a 412px-wide row. A landscape phone is 915px wide: that row has room,
+ * and hiding the mode chip there would remove information for no gain. Measured
+ * before the split: at 915x412 the access-mode chip vanished from the title row.
+ */
+const NARROW_LAYOUT = '(max-width: 768px)'
 
 /** Every control that gets a hit layer, so the `position: relative` stays in one place. */
 const TARGETS = [
@@ -104,7 +116,10 @@ const CSS = `
     left: -16px;
     right: -16px;
   }
+}
 
+/* Width-only from here: everything below hides or restructures host content. */
+@media ${NARROW_LAYOUT} {
   /* ── the session title row: give the title its width back ─────────────────
    *
    * Measured at 412x915: the title container gets 118px while the text needs
@@ -130,8 +145,15 @@ const CSS = `
   [data-slot="conversation.session.header"] [class*="_headerActions"] [class*="_label"] {
     display: none;
   }
-  /* The chip's own text span (the icon is an svg sibling and stays). */
-  [data-slot="conversation.session.header"] [class*="_trigger"] > span:first-of-type {
+  /* The chip's own text span (the icon is an svg sibling and stays).
+   *
+   * Scoped to the crumb segment that holds the chip, not to every _trigger in the
+   * header: the selector used to be [class*="_trigger"] > span:first-of-type, and a
+   * future trigger whose first span is its ICON WRAPPER would have lost it silently.
+   * Measured on the live header: exactly one _trigger (the subagents chip, inside
+   * _crumbSeg) with exactly one direct span, so this scoping changes nothing today
+   * and stops the rule from reaching a control it was never about. */
+  [data-slot="conversation.session.header"] [class*="_crumbSeg"] [class*="_trigger"] > span:first-of-type {
     display: none;
   }
 

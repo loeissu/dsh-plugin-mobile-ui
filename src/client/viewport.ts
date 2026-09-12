@@ -101,13 +101,18 @@ const CSS = `
  * why the composer lift looked random. Harmless on engines that ignore the
  * token.
  */
-function pinInteractiveWidget(): void {
+function pinInteractiveWidget(): () => void {
   const meta = document.querySelector('meta[name="viewport"]')
-  if (meta === null) return
+  if (meta === null) return () => {}
   const raw = meta.getAttribute('content')
-  if (raw === null) return
-  if (/interactive-widget\s*=/.test(raw)) return
+  if (raw === null) return () => {}
+  if (/interactive-widget\s*=/.test(raw)) return () => {}
   meta.setAttribute('content', `${raw}, interactive-widget=resizes-visual`)
+  // The host's own viewport declaration is restored on disposal: this module
+  // rewrites an element it does not own, and leaving the rewrite behind after the
+  // plugin is disabled or HMR-unloaded would keep changing IME behaviour for a
+  // feature that is no longer installed.
+  return () => { meta.setAttribute('content', raw) }
 }
 
 /**
@@ -132,7 +137,7 @@ function isEditingFocus(): boolean {
  */
 export function installKeyboardFit(): () => void {
   injectStyles(STYLE_ID, CSS)
-  pinInteractiveWidget()
+  const restoreViewportMeta = pinInteractiveWidget()
 
   if (typeof window === 'undefined') return () => {}
   const vv = window.visualViewport
@@ -361,5 +366,6 @@ export function installKeyboardFit(): () => void {
     document.removeEventListener('pointerdown', onPointerDown, true)
     document.removeEventListener('touchstart', onPointerDown, true)
     release()
+    restoreViewportMeta()
   }
 }

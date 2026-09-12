@@ -14,9 +14,14 @@
  *
  * This was observed on a live instance, not inferred. Because lower priority
  * renders, taking over a shipped key means registering BELOW it — see
- * `TOOL_CARD_PRIORITY` in `index.tsx`. Only the names listed in
- * `FEATURES.toolCards` are taken over, and that list is empty by default, so
- * nothing shipped is displaced until someone opts in.
+ * `SHADOW_PRIORITY` in `index.tsx`.
+ *
+ * Note what "taking over" costs: the shipped card is never rendered, so its
+ * affordances go with it. `FEATURES.toolCards` ships with five entries
+ * (pwsh/read/grep/edit/write), of which read/grep/edit/write replace the host's own
+ * card for that tool and therefore lose its "在轨迹中查看" and file-open controls.
+ * Set the list to `[]` to keep every shipped card; `pwsh` alone is additive, since
+ * the host leaves that key to its generic card.
  *
  * ## Why the prop type is declared here
  *
@@ -38,7 +43,7 @@
  * a minimal row rather than throwing. DSH's own convention is the same:
  * "Unknown or malformed tool data falls back to the generic form."
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { accentSoft, injectStyles, MOTION, R, SPACE, TOKEN, TYPE, TYPE_LH, V } from './theme.ts'
 import { t } from './config.ts'
 
@@ -383,7 +388,12 @@ export function ToolCard(props: ToolCardProps) {
   const name = blockName(props.block, props.toolName)
   const settled = isSettled(props.block)
   const failed = settled && props.block.isError === true
-  const raw = contentText(settled ? props.block.content : undefined)
+  // Memoised on the block: the parent turn re-renders on every streaming chunk, and
+  // this walks up to MAX_RENDERED_CHARS of text through stripEnvelope each time.
+  const raw = useMemo(
+    () => contentText(settled ? props.block.content : undefined),
+    [settled, props.block],
+  )
   const truncated = raw.length > MAX_RENDERED_CHARS
   const body = truncated ? `${raw.slice(0, MAX_RENDERED_CHARS)}\n… (${t.toolTruncated})` : raw
   const subCalls = isSettled(props.block) ? props.block.subCalls : (props.block as RunningBlock).subCalls

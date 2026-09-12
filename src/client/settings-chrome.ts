@@ -27,12 +27,6 @@ const NARROW = '(max-width: 768px)'
  */
 const CSS = `
 @media ${NARROW} {
-  /* Header "导航" tab would sit over the modal title. */
-  body:has([role="dialog"] [class*="_navCell"]) .dsh-mobile-nav-tab {
-    opacity: 0 !important;
-    pointer-events: none !important;
-  }
-
   /* ── chrome / header ─────────────────────────────────────────────── */
   [role="dialog"] [class*="_header"] {
     padding: 14px 12px 6px !important;
@@ -76,23 +70,36 @@ const CSS = `
     padding: 8px 10px 0 !important;
     gap: 8px !important;
   }
-  /* Five tabs have to fit 392px without horizontal scrolling.
+  /* Five tabs have to fit the strip without horizontal scrolling.
    *
    * Measured at 412: the authored spacing wants 453px for the five cells, so the
    * strip scrolls and — because the selected tab is scrolled into view — the FIRST
    * one is clipped: 通用设置 rendered as 设置 in the reported screenshot. The
-   * reclaimed 68px comes from spacing only, never from type size or content:
-   * cell padding 11 -> 7px (-40), the icon/label gap 8 -> 4px (-20), and the list
-   * gap 4 -> 2px (-8). Measured after: 385px of 392, so the row is complete and
-   * still, with 13px labels and the 16px icons untouched. */
+   * reclaimed spacing comes from layout only, never from type size or content:
+   * cell padding 11 -> 6px (−50), the icon/label gap 8 -> 4px (−20), and the list
+   * gap 4 -> 2px (−8). Measured after: 377px of content in 392, i.e. it fits with
+   * ~15px of slack rather than exactly (412 and 430 measured 100% full at 7px
+   * padding, which is one font-metric change away from clipping again). */
   [role="dialog"] [class*="_navList"] {
     gap: 2px !important;
   }
   [role="dialog"] [class*="_navCell"] {
-    padding: 6px 7px !important;
+    padding: 6px 6px !important;
     gap: 4px !important;
     min-height: 32px !important;
     border-radius: ${R.md} !important;
+  }
+
+  /* Narrower than that, the five labels cannot fit however tight the padding is:
+     measured 377px of content against 340 available at 360px and 300 at 320px. The
+     ICONS are what goes — they cost 20px per cell, the labels carry the meaning, and
+     this is the same trade every phone tab bar makes on a small screen. Measured
+     after: 285px of content, so five tabs fit a 320px phone. */
+  @media (max-width: 408px) {
+    [role="dialog"] [class*="_navCell"] > svg,
+    [role="dialog"] [class*="_navCell"] > [class*="_icon"] {
+      display: none !important;
+    }
   }
   [role="dialog"] [class*="_navLabel"] {
     font-size: ${TYPE.bodySm} !important;
@@ -176,26 +183,38 @@ const CSS = `
  * 32px visual is unchanged and nothing moves.
  */
 @media ${PHONE_MEDIA} {
+  /* The 导航 tab while a modal dialog is up. This MUST live here, not in the
+     narrow block: in landscape the tab is displayed (PHONE_MEDIA matches) while the
+     drawer root's z-index (2147482000) beats the parked sidebar column that hosts
+     the dialog (40) — so a suppression rule gated on width alone left the tab
+     painting over the modal and swallowing taps in its 45x45 hit box. */
+  body:has([role="dialog"] [class*="_navCell"]) .dsh-mobile-nav-tab {
+    opacity: 0 !important;
+    pointer-events: none !important;
+  }
+
   [role="dialog"] [class*="_close"] {
     position: relative !important;
   }
   [role="dialog"] [class*="_close"]::after {
     content: '';
     position: absolute;
-    /* -8px: the desktop dialog's close is 28px, and the pixel walk measures a
-       nominal box one pixel short, so this lands at 43 — as close to the 44px
-       target as the header row allows. */
-    inset: -8px;
+    /* -9px: the desktop dialog's close is 28px and the pixel walk measures a
+       nominal box one pixel short, so this lands at 45 — above the 44px target,
+       where -8px gave 43 and left the plugin's own only exit under its stated
+       minimum. The title row already has min-height 44px, so the room exists. */
+    inset: -9px;
   }
-  /* Section tabs are 32px tall in the desktop dialog: enough for a mouse, not for
-     a thumb, so they get the same treatment without changing their size. */
+  /* Section tabs: 32px tall in portrait, 40 in the desktop-shaped dialog. ±6px
+     reaches 44 on the short one; adjacent cells sit ~40-43px apart, so the layers
+     touch at most. */
   [role="dialog"] [class*="_navCell"] {
     position: relative !important;
   }
   [role="dialog"] [class*="_navCell"]::after {
     content: '';
     position: absolute;
-    inset: -4px -2px;
+    inset: -6px -2px;
   }
 }
 `

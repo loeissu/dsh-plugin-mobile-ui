@@ -187,7 +187,9 @@ export function apply(ctx: ClientContext): void {
   }
 
   // Keyed dispatch: one registration per tool name, each shadowing that tool's
-  // shipped card. Empty by default, so nothing shipped is displaced.
+  // shipped card. The shipped list has five entries, so four of them (read, grep,
+  // edit, write) really do displace a shipped card — the fifth (pwsh) claims a key
+  // the host leaves to its generic card. `toolCards: []` keeps every shipped card.
   //
   // Priority is load-bearing, not cosmetic. A keyed cell accepts only ONE entry
   // per priority: registering at the same priority as the shipped entry throws

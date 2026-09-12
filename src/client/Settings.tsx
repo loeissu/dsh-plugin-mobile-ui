@@ -120,7 +120,9 @@ const CSS = `
   font-weight: 500;
   /* R.md + 36px: it used to be R.lg (14px) on a ~28px control, which reads as a
      pill rather than the 12/16px corner the cards around it use, and sat well
-     under the touch minimum. */
+     under the touch minimum. The painted control stops at 36px — the row it sits in
+     is 44px tall, so growing the box itself would push the row — and the hit area
+     is completed by the pseudo-element below. */
   min-height: 36px;
   padding: ${SPACE.sm} ${SPACE.lg};
   border-radius: ${R.md};
@@ -128,7 +130,15 @@ const CSS = `
   background: transparent;
   color: inherit;
   cursor: pointer;
+  position: relative;
   transition: background ${MOTION.base} var(${TOKEN.ease}, ${MOTION.ease});
+}
+/* 36 + 2x4 = 44: this is the plugin's own control, so it does not get to be the
+   one that misses the target the rest of the plugin enforces. */
+.dsh-mobile-settings__action::after {
+  content: '';
+  position: absolute;
+  inset: -4px -2px;
 }
 
 .dsh-mobile-settings__action:active { background: ${V.active}; }

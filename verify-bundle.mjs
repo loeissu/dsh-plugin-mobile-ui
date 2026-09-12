@@ -75,8 +75,10 @@ const PLATFORM_MODULES = [
 
 /**
  * Slots `apply()` must register into, given the default feature flags in
- * `src/client/config.ts`. `tool.call.toolview` and `sidebar` are absent because
- * both REPLACE shipped surfaces and are opt-in.
+ * `src/client/config.ts`. `sidebar` is absent because it REPLACES a shipped surface
+ * and is opt-in (`replaceSidebar: false`). `tool.call.toolview` IS registered — five
+ * keyed entries, checked separately below — because `toolCards` ships with five tool
+ * names; only the `sidebar` cell is left alone by default.
  */
 const EXPECTED_SLOTS = ['settings.section', 'shell.overlay']
 

@@ -69,9 +69,21 @@ for (const width of [412, 360]) {
   await sleep(900)
   const m = JSON.parse(await ev(MEASURE))
   console.log(`\nwidth ${width}: ${JSON.stringify(m)}`)
-  check(m.separator === 'none', `@${width} the decorative "/" separator is gone`, `display=${m.separator}`)
-  check(m.modeLabel === 'none', `@${width} the duplicated mode chip is gone`, `display=${m.modeLabel}`)
-  check(m.chipClippedBy === 0, `@${width} the subagents chip is no longer cut mid-word`, `clipped ${m.chipClippedBy}px`)
+  // These elements are SESSION-STATE dependent: the "/" separator, the mode chip and
+  // the subagents chip only exist in the header while the session has them. Absence
+  // satisfies the requirement (nothing extra visible, nothing cut), so the assertions
+  // are about visibility, not existence — otherwise the suite fails on a plain
+  // session for reasons that have nothing to do with the plugin.
+  const absent = (v) => v === 'absent' || v === null
+  check(m.separator === 'none' || m.separator === 'absent',
+    `@${width} the decorative "/" separator is not visible`,
+    `display=${m.separator}${m.separator === 'absent' ? ' (not present in this session)' : ''}`)
+  check(m.modeLabel === 'none' || m.modeLabel === 'absent',
+    `@${width} the duplicated mode chip is not visible`,
+    `display=${m.modeLabel}${m.modeLabel === 'absent' ? ' (not present in this session)' : ''}`)
+  check(m.chipClippedBy === 0 || absent(m.chipClippedBy),
+    `@${width} the subagents chip is not cut mid-word`,
+    `clipped ${m.chipClippedBy}px${absent(m.chipClippedBy) ? ' (chip not present in this session)' : ''}`)
   check(m.crumbClippedBy <= 20, `@${width} the session title loses at most 20px`, `clipped ${m.crumbClippedBy}px (was 59 at 412, 73 at 360)`)
   // Proportional floor: the row is narrower at 360, so an absolute number would
   // just be measuring the viewport. 45% of the width is comfortably above the old

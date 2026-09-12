@@ -111,6 +111,15 @@ const LINK_PROBE_TIMEOUT_MS = 4000
  */
 const LINK_PROBE_MARK = '__DSH_BOOT__'
 
+/**
+ * A response at least this large counts as reaching the host even without the marker.
+ *
+ * The served shell measures ~43KB; a proxy answering on its own cannot produce that.
+ * This is what keeps a renamed boot marker from turning every healthy link into a
+ * false "链路已断" (the marker is an internal wire name, not a contract).
+ */
+const LINK_PROBE_MIN_BYTES = 8000
+
 const CSS = `
 /* ── the drawer exists only on narrow screens ──────────────────────────────
    HIDDEN BY DEFAULT, enabled by the media query below — not the other way round.
@@ -934,9 +943,17 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   /**
    * Does a request still reach the host?
    *
-   * The probe fetches this page with `no-store` and looks for markers the host
-   * injects (`__DSH_BOOT__`, the tether rewrite). A loopback proxy with a dead
-   * tunnel cannot produce them — they are added host-side during the response.
+   * The probe fetches this page with `no-store` and requires either a marker the
+   * host injects into the response or a body of host-shell size. A loopback proxy
+   * with a dead tunnel cannot produce either — measured, a dead hop fails at the
+   * transport level (rejected fetch or a non-OK status), and a proxy that answers on
+   * its own returns a placeholder far smaller than the ~43KB shell.
+   *
+   * The size fallback exists because the marker is an internal wire name
+   * (`__DSH_BOOT__`), not part of any published slot contract: if a host build
+   * renames it, requiring the literal string would report every healthy link as dead
+   * and take the reconnect button away from the user. A marker miss is only treated
+   * as death when the response is also too small to be the app.
    */
   const probeLink = useCallback(async (): Promise<boolean> => {
     if (typeof fetch !== 'function') return true
@@ -946,7 +963,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       const res = await fetch(window.location.href, { cache: 'no-store', signal: controller?.signal })
       if (!res.ok) return false
       const body = await res.text()
-      return body.includes(LINK_PROBE_MARK)
+      return body.includes(LINK_PROBE_MARK) || body.length >= LINK_PROBE_MIN_BYTES
     } catch {
       return false
     } finally {
@@ -1066,22 +1083,35 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
    *
    * The reserve is the label's width PLUS the host's own gap between its tabs, so
    * 导航 / 对话 / 轨迹 read as one evenly spaced row. Measured at 412: all three
-   * labels are 13px, the host's tablist carries `column-gap: 36px` (对话 and 轨迹
+   * labels are 13px, the host's tablist carries a 36px column gap (对话 and 轨迹
    * sit 36px apart), and the old hand-picked 10px left 导航 visibly off-rhythm.
    *
    * Measured rather than assumed in two ways: the label is text (26px for '导航',
    * 65px for 'Navigation'), and the gap is the host's (read from `column-gap`, with
    * a measurement between the host's own tabs as a fallback). The write cannot be
    * one-shot either: the host's tab strip is committed AFTER this overlay mounts,
-   * so a single query found nothing and the fallback stayed live — hence the cheap
-   * guard on body mutations below, which re-queries only when the element is gone
-   * or the variable was cleared.
+   * so a single query found nothing and the fallback stayed live — hence the guard
+   * on body mutations below, which re-queries only when the element is gone or the
+   * variable was cleared.
+   *
+   * Two cost/robustness notes, both from review:
+   *  - the query is anchored to the conversation header, because the document can
+   *    hold a SECOND tablist (the Plugins settings section registers one, and the
+   *    settings dialog mounts inside the sidebar column, which precedes the
+   *    conversation in document order) — an unqualified query could reserve room on
+   *    the settings strip and leave the conversation strip un-reserved;
+   *  - the observer coalesces through one animation frame, because it watches the
+   *    whole body and `reserve()` reads three layout values: a streaming turn mutates
+   *    the DOM many times per second, and measuring per mutation would force a style
+   *    and layout flush each time on a phone.
    */
   useEffect(() => {
     const tab = tabRef.current
     if (tab === null) return
     const VAR = '--dsh-mobile-nav-reserve'
     let list: HTMLElement | null = null
+    let frame: number | null = null
+    let disposed = false
 
     /** The host's own inter-tab gap, so the three labels space evenly. */
     const hostGap = (target: HTMLElement): number => {
@@ -1104,11 +1134,24 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       if (list.style.getPropertyValue(VAR) !== value) list.style.setProperty(VAR, value)
     }
 
-    const ensure = (): void => {
+    const measure = (): void => {
+      // `document.fonts.ready` cannot be cancelled, so the callback can land after
+      // the effect is gone and would otherwise write the variable onto a host
+      // element from a dead plugin instance.
+      if (disposed) return
       if (list !== null && list.isConnected && list.style.getPropertyValue(VAR) !== '') { reserve(); return }
-      const found = document.querySelector('[class*="_tabs"][role="tablist"]')
+      const found = document.querySelector('[data-slot="conversation.session.header"] [class*="_tabs"][role="tablist"]')
+        ?? document.querySelector('[class*="_tabs"][role="tablist"]')
       list = found instanceof HTMLElement ? found : null
       reserve()
+    }
+
+    const ensure = (): void => {
+      if (frame !== null) return
+      frame = window.requestAnimationFrame(() => {
+        frame = null
+        measure()
+      })
     }
 
     ensure()
@@ -1121,6 +1164,9 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     window.addEventListener('resize', ensure)
     void document.fonts?.ready.then(ensure).catch(() => {})
     return () => {
+      disposed = true
+      if (frame !== null) window.cancelAnimationFrame(frame)
+      frame = null
       sizeObserver?.disconnect()
       domObserver?.disconnect()
       window.removeEventListener('resize', ensure)
@@ -1266,6 +1312,12 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       <div
         className="dsh-mobile-drawer-scrim"
         data-dsh-mobile-ui="drawer-scrim"
+        /* Both closed-state layers are `inert`: on a phone the drawer subtree is
+           always rendered (off-canvas, pointer-events none), so without this the
+           panel's dozens of controls stay in the tab order and the accessibility
+           tree while invisible off the left edge. The scrim is click-to-close, so it
+           is only inert while closed — when open it must stay hittable. */
+        inert={open ? undefined : ''}
         onClick={() => { setOpen(false) }}
       />
 
@@ -1285,6 +1337,10 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
            claiming modality would overstate it. */
         role="navigation"
         aria-label={t.drawerTitle}
+        /* Closed: off-canvas and unfocusable (see the scrim above). The panel is
+           not wrapped in an extra element, so this is the one place the state has to
+           be stated. */
+        inert={open ? undefined : ''}
         onTouchStart={onPanelTouchStart}
         onTouchMove={onPanelTouchMove}
         onTouchEnd={onPanelTouchEnd}
@@ -1331,6 +1387,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                 type="button"
                 className="dsh-mobile-ws"
                 data-active={ws.workspaceId === activeId ? 'true' : 'false'}
+        aria-current={ws.workspaceId === activeId ? 'true' : undefined}
                 data-dsh-mobile-ui="drawer-workspace"
                 onClick={() => { props.openWorkspace(ws.workspaceId); setOpen(false) }}
               >
@@ -1357,6 +1414,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                     type="button"
                     className="dsh-mobile-sess"
                     data-active={s.id === current ? 'true' : 'false'}
+        aria-current={s.id === current ? 'true' : undefined}
                     data-dsh-mobile-ui="drawer-session"
                     onClick={() => { props.openSession(s.id); setOpen(false) }}
                   >
@@ -1425,11 +1483,26 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
             aria-label={linkDead ? t.drawerReload : t.drawerRefresh}
             aria-busy={refreshBusy}
             onClick={() => {
-              // A proven-dead link cannot be fixed by reconnecting: the socket's
-              // peer is the phone's own proxy. Reloading re-runs the handshake the
-              // Tether client needs to rebuild the tunnel behind it.
+              // The dead state is a CLAIM about the last probe, so a tap re-checks it
+              // before escalating: a probe that timed out on slow mobile data, or one
+              // that raced the reconnect handshake, must not steer the user into a
+              // full reload (which costs the draft and the streaming turn) when the
+              // cheap reconnect would have done. Reloading is the escalation for a
+              // link that is STILL unreachable, because at that point the socket's
+              // peer — the phone's own proxy — cannot be fixed from here, while a
+              // reload re-runs the handshake the Tether client needs to rebuild the
+              // tunnel behind it (the host log shows every page load rebuilding it).
               if (linkDead) {
-                window.location.reload()
+                if (refreshBusy) return
+                setReconnecting(true)
+                void probeLink().then((alive) => {
+                  if (alive) {
+                    setLinkDead(false)
+                    setReconnecting(false)
+                    return
+                  }
+                  window.location.reload()
+                })
                 return
               }
               if (refreshBusy) return
