@@ -21,7 +21,7 @@
  * survives CSS-Module hash rotation. Every target was checked to have no existing
  * `::after` (all `none`) and `position: static`, so the pseudo-element is free.
  */
-import { injectStyles } from './theme.ts'
+import { injectStyles, TYPE } from './theme.ts'
 
 const STYLE_ID = 'conversation-chrome'
 
@@ -96,6 +96,70 @@ const CSS = `
   [data-slot="conversation.session.header"] [role="tablist"] [role="tab"]:last-of-type::before {
     left: -16px;
     right: -16px;
+  }
+
+  /* ── the session title row: give the title its width back ─────────────────
+   *
+   * Measured at 412x915: the title container gets 118px while the text needs
+   * 281px, so 58% is ellipsised (at 360 it is 106 of 281), while the row's own
+   * controls account for roughly 191px. Worse, the subagents chip (an 80px child)
+   * is clipped by the crumb strip's overflow:hidden down to its 36px parent.
+   *
+   * Two occupants are removed, and only these:
+   *   - the "/" separator before the subagents chip — pure decoration (5px plus
+   *     the 10px flex gap that goes with it);
+   *   - the mode chip (标准模式, 68px) — informational, and the same state is
+   *     exposed by the composer's 访问模式 control on the same screen.
+   * The subagents chip keeps its BUTTON but drops its count text, so the entry
+   * stays reachable as an icon (it used to be cut mid-word: an 80px child inside
+   * a 36px parent, clipped by the crumb strip).
+   *
+   * 打开方式 is deliberately KEPT: the 更多 menu was measured to contain only
+   * "下载 Session 日志", so hiding that pair would remove the only route to it.
+   */
+  [data-slot="conversation.session.header"] [class*="_separator"] {
+    display: none;
+  }
+  [data-slot="conversation.session.header"] [class*="_headerActions"] [class*="_label"] {
+    display: none;
+  }
+  /* The chip's own text span (the icon is an svg sibling and stays). */
+  [data-slot="conversation.session.header"] [class*="_trigger"] > span:first-of-type {
+    display: none;
+  }
+
+  /* ── the metrics footer: stop cutting the text ────────────────────────────
+   *
+   * Root cause measured, and it was not the font size. The row is 370px wide with
+   * 32px of horizontal padding on each side, so its content box is 306px while the
+   * two pills need ~341px (each pill is an _anchor whose base size is the pill's
+   * max-content width: icon + gap + label + padding). The flex line is therefore
+   * 35px short and BOTH labels ellipsise: measured 140px needed inside a 107px label
+   * box at 412, and 82px at 360. Two changes, neither of which moves anything that
+   * carries information:
+   *   - the row's side padding drops to 8px on phones (the 32px was for a wide
+   *     desktop row; it is 64px of empty gutter on a 412px screen), and
+   *   - the label steps down to 12px for headroom.
+   * Below 380px the row may also wrap, where a second 22px line beats a cut number.
+   * The grow on the anchors is kept from the investigation above: it is what lets
+   * the two pills share the freed gutter evenly.
+   */
+  [data-slot="conversation.composer.dock"] > [class*="_root"] {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+  [data-slot="conversation.composer.dock"] > [class*="_root"] > [class*="_anchor"] {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+  [data-slot="conversation.composer.dock"] [class*="_label"] {
+    font-size: ${TYPE.caption};
+  }
+  @media (max-width: 380px) {
+    [data-slot="conversation.composer.dock"] > [class*="_root"] {
+      flex-wrap: wrap;
+      row-gap: 2px;
+    }
   }
 }
 `

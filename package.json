@@ -38,6 +38,7 @@
     "cordis.patch.yml"
   ],
   "scripts": {
+    "prebundle": "node check-css-backticks.mjs",
     "bundle": "tsdown",
     "verify": "node verify-bundle.mjs lib/client.js"
   },

@@ -19,12 +19,46 @@
  *  3. Missing `apply` / `inject` exports, or an `apply` that registers into a
  *     different slot set than expected.
  *
+ * It also refuses to run on a STALE bundle. This is not hypothetical: a failed
+ * build leaves the previous lib/client.js in place, and `npm run verify` then
+ * happily reports PASS for code that is not the code on disk. That has already
+ * produced one round of verifying the wrong artifact, so the check is explicit:
+ * any source file newer than the bundle aborts the run.
+ *
  * Usage: `node verify-bundle.mjs lib/client.js`
  */
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir, stat } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const bundlePath = process.argv[2]
 if (bundlePath === undefined) throw new Error('usage: node verify-bundle.mjs <client.js>')
+
+// --- staleness guard ---------------------------------------------------------
+{
+  const here = dirname(fileURLToPath(import.meta.url))
+  const sources = []
+  const collect = async (dir) => {
+    for (const entry of await readdir(dir, { withFileTypes: true })) {
+      const path = join(dir, entry.name)
+      if (entry.isDirectory()) await collect(path)
+      else if (/\.tsx?$/.test(entry.name)) sources.push(path)
+    }
+  }
+  await collect(join(here, 'src'))
+  const bundleTime = (await stat(bundlePath)).mtimeMs
+  const newer = []
+  for (const path of sources) {
+    const t = (await stat(path)).mtimeMs
+    if (t > bundleTime) newer.push(path.slice(here.length + 1))
+  }
+  if (newer.length > 0) {
+    console.error('STALE BUNDLE: these sources are newer than ' + bundlePath + ':')
+    for (const path of newer.slice(0, 10)) console.error('  ' + path)
+    console.error('Run `npm run bundle` first (and check its exit code).')
+    process.exit(2)
+  }
+}
 
 /** Specifiers the shell's frozen table can answer. Mirrors platform.ts. */
 const PLATFORM_MODULES = [
