@@ -605,6 +605,7 @@ dsh-plugin-mobile-ui/
 |---|---|
 | [`docs/MOBILE-UI-GUIDE.md`](docs/MOBILE-UI-GUIDE.md) | **当前实现总说明。** 表面/插槽对照、抽屉交互、设计 token、连接恢复、键盘根因、验证清单、运行实例 |
 | [`docs/2026-09-12-upgrade-and-maintenance.md`](docs/2026-09-12-upgrade-and-maintenance.md) | **升级与维护手册。** 交付物清单、日常用法、DSH 升级后的检查清单与唯一的致命风险点、手机客户端升级要复核什么 |
+| [`docs/2026-09-12-ui-audit.md`](docs/2026-09-12-ui-audit.md) | **界面全面审查与优化建议。** 多视口/双主题/reduce-motion 实测基线、缺陷清单（含代码级 P1）、字体/圆角/布局/动效四方面建议与落地批次，以及被实测推翻的怀疑 |
 | [`docs/2026-09-11-session-log.md`](docs/2026-09-11-session-log.md) | 逐项修改日志：修了哪些 bug、每批验收结果、未完成项 |
 | [`docs/00-项目说明.md`](docs/00-项目说明.md) | 项目背景、范围与硬约束 |
 | [`docs/01-final-plan.md`](docs/01-final-plan.md) | **主报告。** 结论摘要、版本策略、完整插槽对照表、插件设计、五阶段实施路线图、12 项风险与降级、已验证清单、8 项待确认问题 |
