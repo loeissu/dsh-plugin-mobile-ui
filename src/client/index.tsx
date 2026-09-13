@@ -41,6 +41,7 @@ import { installResumeReconnect } from './connection-recovery.ts'
 import { installConversationChrome } from './conversation-chrome.ts'
 import { installSettingsChrome } from './settings-chrome.ts'
 import { installSettingsSwipe } from './settings-swipe.ts'
+import { installClipboardFallback } from './clipboard-fallback.ts'
 import { installTetherCompat } from './tether-compat.ts'
 import { installTypography } from './typography.ts'
 import { installKeyboardFit } from './viewport.ts'
@@ -139,6 +140,13 @@ export function apply(ctx: ClientContext): void {
   // so it is registered as an effect and disposed with the plugin.
   if (FEATURES.settingsSwipe) {
     ctx.effect(() => installSettingsSwipe(), 'mobile-ui: settings swipe')
+  }
+
+  // The host's copy actions silently fail in a WebView: the async clipboard API
+  // rejects and the host's own legacy fallback is unreachable. The wrapper goes onto
+  // the clipboard method and comes off with the plugin.
+  if (FEATURES.clipboardFallback) {
+    ctx.effect(() => installClipboardFallback(), 'mobile-ui: clipboard fallback')
   }
 
   // The drawer overlay. `shell.overlay` is a `list`, so this is additive: it

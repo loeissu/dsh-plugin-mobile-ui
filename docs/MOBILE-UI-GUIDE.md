@@ -75,6 +75,7 @@ dsh plugin --profile web add .
 | tether 兼容 | `tether-compat.ts` | 反制 tether 过宽选择器：① `_row` 规则压扁排队栏；② 模态框规则让确认弹层标题压住正文、按钮被卡片裁掉 |
 | 排版基线 | `typography.ts` | 关 WebView 字体放大、行高下限、去点按闪灰 |
 | 主机设置弹层排版 | `settings-chrome.ts` | 窄屏字号/间距/主题三列 |
+| 剪贴板兜底 | `clipboard-fallback.ts` | WebView 里 async clipboard 被拒时接通宿主自己的 legacy 兜底（否则点「复制」静默失败）；仅手机 |
 | 会话控件命中区 | `conversation-chrome.ts` | 宿主的消息操作/composer/`对话`·`轨迹` 命中区扩大到 35–43px（绘制尺寸不变）；会话标题让出空间（隐藏装饰性 `/` 与重复的模式标签、子代理 chip 折叠成图标）；底部指标行不再裁字（2026-09-12 新增）|
 | 设置页左右滑动 | `settings-swipe.ts` | 在宿主设置弹层内容区左右滑动切换分区（点相邻 tab；不抢垂直滚动；到头不回绕；仅手机，横竖屏都生效；2026-09-12 新增）|
 | 手机判定（含横屏） | `theme.ts` 的 `PHONE_MEDIA` | `(max-width: 768px), (max-height: 520px) and (pointer: coarse)`：横屏手机不再因为"够宽"而掉回桌面布局（2026-09-12 新增）|
@@ -236,6 +237,26 @@ android:windowSoftInputMode="adjustResize"
 
 ---
 
+## 8b. 复制（对话里的「复制」在 WebView 里为什么失效）
+
+**这是上游缺陷，由本插件补上。** DSH 的复制助手（`dsh-web-frontend` 内的 `Fn`）逻辑是：
+
+```js
+if (navigator.clipboard?.writeText) { try { await writeText(t); return true } catch { return false } }
+// 仅当 async API *不存在* 时，才会走到下面的 textarea + execCommand('copy') 兜底
+```
+
+问题是 **async clipboard 存在但被拒**（Android WebView 的常态：`writeText` 需要宿主 App 授予的权限）时，它直接 `return false`，**自己的兜底永远走不到**；而调用方是
+`const ok = await Fn(text); if (!ok) return` —— **静默返回**，连「已复制」都不显示。结果就是手机上点「复制」毫无反应。
+
+**实测（触摸模拟的真实 tap）**：点击确实落在「复制」上（`landedOn: 复制`，我们的命中层没有抢走它），`writeText` 只调用一次；把 `writeText` 换成会 reject 的桩后，`execCommand` 调用 **0 次** —— 兜底不可达，这正是根因。
+
+**修法**（`clipboard-fallback.ts`，`FEATURES.clipboardFallback`）：包一层 `navigator.clipboard.writeText`，**只有 reject 时**才走宿主本来就写好的 legacy 路径（离屏 textarea + `execCommand('copy')`，并在之后恢复用户原有选区）。只包不换：真正 API 先试、文案仍由宿主决定、两条路都失败时 promise 依旧 reject（宿主的成功/失败反馈语义不变）；**仅手机生效**（`PHONE_MEDIA`，桌面上的 reject 是真错误，不该被掩盖）。
+
+**验证**：`tools/verify-clipboard-fallback.mjs`（9 项，全 PASS，用**真剪贴板** `readText` 断言，需 CDP 授权）——健康链路（1434 字符进剪贴板、不走兜底）、**WebView 情形**（async 被拒 → 兜底把完全相同的文本写进剪贴板）、桌面（async 被拒 → 不用兜底、剪贴板不变）。
+
+---
+
 ## 9. 工具卡片
 
 - 替换 `pwsh / read / grep / edit / write` 的 shipped 卡片（`priority: -100`）  
@@ -318,6 +339,7 @@ node tools/verify-conversation-chrome.mjs $url  # 会话标题空间 + 底部指
 node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行控件不压 tab 条、五个 tab 不需横滚
 node tools/verify-swipe-and-landscape.mjs $url  # 设置页左右滑动切换分区 + 横屏手机保留移动端表面
 node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时「重试」且绝不导航 + 恢复自愈
+node tools/verify-clipboard-fallback.mjs $url   # 「复制」在 async clipboard 被拒时仍能写入真剪贴板
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```
@@ -363,10 +385,12 @@ docs/                           报告与日志（索引见 docs/README.md）
 | 键盘真机行为 | 客户端只能缓解；根治要改 APK |
 | 无 adb / 无真机自动化 | 触摸、IME、tether 真机宽度未在 CI 验证 |
 | tether 选择器过宽 | 上游缺陷，两处：`_row` 规则压扁排队栏；模态框规则（全屏 + header 绝对定位 + 对 content-box 用 `width:100%`）让确认弹层标题压住正文、右侧按钮被卡片裁掉。我们用窄范围反制，见 `tether-compat.ts` |
+| 标题空间仍可能被挤 | 我们已把标题容器从 ~94px 抬到 ~226px（+132px，A/B 实测），但**带交付物 / 计划 / 队列 chip 的会话**里其他占用者仍会把标题压到 ~76px（412 宽）。这些 chip 都是信息入口，没有"可以无损隐藏"的判断依据，故留作已知项 |
+| 「复制」依赖宿主文案 | 兜底只补「写入剪贴板」这一步；复制哪段文本仍由宿主决定（我们不改语义） |
 | `ctx.locale` 未接 | 文案按 `navigator.language` |
 | 无单元测试 / CI | 仅 CDP 脚本 |
 | GitHub PAT | 会话标题里出现过 `ghp_`；**请去 GitHub 撤销**；抽屉已脱敏显示 |
-| README 可能滞后 | 以本文与 `docs/2026-09-11-session-log.md` 为准 |
+| README 可能滞后 | 以本文为准（README 只保留上手所需） |
 
 ### 已放弃 / 撤回
 

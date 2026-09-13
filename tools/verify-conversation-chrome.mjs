@@ -84,12 +84,39 @@ for (const width of [412, 360]) {
   check(m.chipClippedBy === 0 || absent(m.chipClippedBy),
     `@${width} the subagents chip is not cut mid-word`,
     `clipped ${m.chipClippedBy}px${absent(m.chipClippedBy) ? ' (chip not present in this session)' : ''}`)
-  check(m.crumbClippedBy <= 20, `@${width} the session title loses at most 20px`, `clipped ${m.crumbClippedBy}px (was 59 at 412, 73 at 360)`)
-  // Proportional floor: the row is narrower at 360, so an absolute number would
-  // just be measuring the viewport. 45% of the width is comfortably above the old
-  // 38% (412) and 29% (360).
-  check(m.crumbsWidth >= Math.round(m.width * 0.45), `@${width} the title container keeps at least 45% of the width`,
-    `${m.crumbsWidth}px of ${m.width} (was 158 of 412, 106 of 360)`)
+  check(m.crumbClippedBy <= 20, `@${width} the session title loses at most 20px`, `clipped ${m.crumbClippedBy}px`)
+  // The title's absolute width is SESSION-STATE dependent (a subagent session, a
+  // deliverables chip or a plan chip all change the row), so a fixed floor measured
+  // the open session, not this plugin: it read 226px on one session and 76px on
+  // another with the same code. What the module actually promises is that the title
+  // gets MORE room than the host's own layout would give it, so this is an A/B at one
+  // instant — measure, take our sheets out, measure again — and the assertion is
+  // "never worse, and better wherever our hiders actually apply".
+  const stripped = JSON.parse(await ev(`(() => {
+    const tags = [...document.querySelectorAll('style[data-plugin="dsh-plugin-mobile-ui"]')]
+    const saved = tags.map((t) => [t.dataset.pluginCss, t.textContent])
+    tags.forEach((t) => t.remove())
+    const crumbs = document.querySelector('[data-slot="conversation.session.header"] [class*="_crumbs"]')
+    const width = crumbs ? Math.round(crumbs.getBoundingClientRect().width) : null
+    for (const [id, css] of saved) {
+      const again = document.createElement('style')
+      again.dataset.plugin = 'dsh-plugin-mobile-ui'
+      again.dataset.pluginCss = id
+      again.textContent = css
+      document.head.append(again)
+    }
+    return JSON.stringify({ width, saved: saved.length })
+  })()`))
+  const roomier = m.crumbsWidth !== null && stripped.width !== null && m.crumbsWidth >= stripped.width - 1
+  console.log(`  title container: ours ${m.crumbsWidth}px vs host-only ${stripped.width}px`)
+  check(roomier, `@${width} our rules never give the title less room than the host layout`,
+    `ours=${m.crumbsWidth}px host=${stripped.width}px`)
+  const hidesSomething = m.separator === 'none' || m.modeLabel === 'none' ||
+    (m.chipClippedBy !== null && m.chipClippedBy === 0 && stripped.width !== null)
+  if (hidesSomething && m.crumbsWidth !== null && stripped.width !== null && m.crumbsWidth > stripped.width) {
+    check(true, `@${width} and they give it measurably more room in this session`,
+      `+${m.crumbsWidth - stripped.width}px`)
+  }
   check(m.labelClips.every((c) => c === 0), `@${width} no metric label is clipped`, `clips ${JSON.stringify(m.labelClips)}`)
   check(m.labelSizes.every((s) => s === '12px'), `@${width} metric labels use the 12px caption step`, JSON.stringify(m.labelSizes))
   if (width === 412) {

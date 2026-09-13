@@ -303,6 +303,18 @@ export const FEATURES = {
    */
   settingsSwipe: true,
   /**
+   * Make the host's 复制 actions work in an Android WebView.
+   *
+   * DSH's copy helper returns `false` without trying its own legacy fallback when the
+   * async clipboard API exists but REJECTS — the normal WebView case — and its caller
+   * then returns silently, so a tap on 复制 does nothing and shows no feedback. This
+   * wraps `navigator.clipboard.writeText` so a rejection falls back to the legacy path
+   * the host already ships; the real API is always tried first and the copied text is
+   * still chosen by the host. Phones only, disposed with the plugin.
+   * See `src/client/clipboard-fallback.ts`.
+   */
+  clipboardFallback: true,
+  /**
    * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
    * can work at all: the live viewport heights, the smallest visual-viewport
    * height seen since load, and event counters.
