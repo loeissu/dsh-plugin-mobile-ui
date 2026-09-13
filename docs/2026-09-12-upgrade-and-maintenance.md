@@ -1,4 +1,4 @@
-﻿# 升级与维护手册
+# 升级与维护手册
 
 **日期**：2026-09-12
 **适用**：`dsh-plugin-mobile-ui` 0.1.0
@@ -16,7 +16,7 @@
 | 构建产物 | `lib/client.js`（约 105 KB）+ `lib/index.js` | **不入 git**，由 `npm run bundle` 生成；DSH 每请求从磁盘读 `lib/client.js` |
 | 线上部署 | profile `web`（`~/.dsh/profiles/web`） | `package.json` 里是 `"dsh-plugin-mobile-ui": "link:H:/DSH/_work/repo/dsh-plugin-mobile-ui"`，`node_modules` 里是 **junction**；即"仓库源码 = 线上插件" |
 | 无浏览器契约检查 | `verify-bundle.mjs` | `npm run verify` 会在 Node 里模拟 loader，校验注册/渲染契约 |
-| 浏览器验收脚本 | `tools/`（73 个：30 个回归套件 + 探针；`retired/` 另存已放弃设计） | `probe-*.mjs` 一次性探针；`verify-*.mjs` 是回归套件，需 3080 + Chrome `:9222` + token |
+| 浏览器验收脚本 | `tools/`（73 个：32 个回归套件 + 探针；`retired/` 另存已放弃设计） | `probe-*.mjs` 一次性探针；`verify-*.mjs` 是回归套件，需 3080 + Chrome `:9222` + token |
 | 文档 | `docs/` | 现状总说明看 `MOBILE-UI-GUIDE.md`，逐场日志看 `2026-09-11-session-log.md` |
 | **未交付** | 原生 APK | 原生启动屏与 `windowSoftInputMode` 根治都需要重新出包；本机缺 MSVC / `link.exe`，出不了包（见 §6） |
 
@@ -42,8 +42,8 @@ dsh plugin --profile web add .   # 已装过则跳过（现在已装）
 | 打开导航抽屉 | 顶栏文字 **「导航」**（在「对话」「轨迹」左侧） |
 | 新建会话 | 抽屉标题栏 **＋** |
 | 设置 | 抽屉底部 **设置** |
-| 手动重连 | 抽屉底部 **刷新连接** |
-| 连接状态 | 底部圆点：蓝=已连接，蓝呼吸=连接中，灰=未连接 |
+| 手动重连 | 抽屉底部 **刷新连接**（换 mux socket）；链路假活时按钮变 **重试**，并自动轮询直到恢复（不导航） |
+| 连接状态 | 底部圆点：蓝=已连接，蓝呼吸=连接中，灰=未连接，**深色圆环=链路已断** |
 | 关闭抽屉 | 遮罩 / 面板内左滑 >72px / `×` / Esc |
 
 ### 2.3 改完代码怎么生效

@@ -162,7 +162,8 @@ docs/                        见 docs/README.md（现行 vs 历史分类）
 
 ## 文档
 
-- **[docs/MOBILE-UI-GUIDE.md](docs/MOBILE-UI-GUIDE.md)** — 使用与维护的主文档（能力、token、开关、验证、键盘、横屏）。
+- **[docs/00-项目说明.md](docs/00-项目说明.md)** — **完整项目说明**：背景与硬约束、加载原理、功能全表、每个模块、设计 token、验证体系、上游缺陷反制、维护手册、被推翻的结论。
+- **[docs/MOBILE-UI-GUIDE.md](docs/MOBILE-UI-GUIDE.md)** — 使用与维护指南（能力、token、开关、验证、键盘、横屏）。
 - **[docs/2026-09-12-upgrade-and-maintenance.md](docs/2026-09-12-upgrade-and-maintenance.md)** — DSH / tether 升级影响面与检查清单。
 - **[docs/README.md](docs/README.md)** — 全部文档的索引，标明哪些是**现行**、哪些是**历史记录**。
 

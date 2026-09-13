@@ -2,7 +2,8 @@
 
 先读哪一篇：
 
-- **要使用或维护这个插件** → [MOBILE-UI-GUIDE.md](MOBILE-UI-GUIDE.md)（能力、token、开关、验证清单、键盘、横屏）
+- **要了解整个项目** → [00-项目说明.md](00-项目说明.md)（**完整项目说明**：背景/约束/加载原理/功能全表/模块参考/token/验证体系/上游缺陷反制/维护手册/历史结论）
+- **要使用或维护这个插件** → [MOBILE-UI-GUIDE.md](MOBILE-UI-GUIDE.md)（能力、token、开关、验证清单、键盘、横屏、复制与提示）
 - **要升级 DSH 或 tether** → [2026-09-12-upgrade-and-maintenance.md](2026-09-12-upgrade-and-maintenance.md)（影响面 + 检查清单）
 - **只想快速上手** → 根目录 [README.md](../README.md) / [README.en.md](../README.en.md)
 
@@ -14,10 +15,10 @@
 
 | 文档 | 内容 |
 |---|---|
-| [MOBILE-UI-GUIDE.md](MOBILE-UI-GUIDE.md) | 主文档：各表面与开关、设计 token、宿主钩子、验证清单、键盘/横屏注意事项 |
+| [00-项目说明.md](00-项目说明.md) | **完整项目说明（权威）**：一页速览、背景与硬约束、加载原理、功能全表、17 个模块参考、设计 token、32 个套件的验证体系、上游缺陷反制清单、维护手册、被推翻的结论 |
+| [MOBILE-UI-GUIDE.md](MOBILE-UI-GUIDE.md) | 使用与维护指南：各表面与开关、设计 token、宿主钩子、验证清单、键盘/横屏、复制与提示 |
 | [2026-09-12-upgrade-and-maintenance.md](2026-09-12-upgrade-and-maintenance.md) | DSH / tether 升级时会断什么、怎么查、可维护性结论 |
 | [2026-09-12-overlap-audit.md](2026-09-12-overlap-audit.md) | 与 tether 注入样式的重叠规则清单（结论仍然成立） |
-| [00-项目说明.md](00-项目说明.md) | 项目缘起、约束、术语（数字以 README 为准） |
 
 ## 计划中 / 已完成但未应用
 
