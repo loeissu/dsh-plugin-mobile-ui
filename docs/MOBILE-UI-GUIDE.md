@@ -76,6 +76,7 @@ dsh plugin --profile web add .
 | 排版基线 | `typography.ts` | 关 WebView 字体放大、行高下限、去点按闪灰 |
 | 主机设置弹层排版 | `settings-chrome.ts` | 窄屏字号/间距/主题三列 |
 | 剪贴板兜底 | `clipboard-fallback.ts` | WebView 里 async clipboard 被拒时接通宿主自己的 legacy 兜底（否则点「复制」静默失败）；仅手机 |
+| hover 提示收尾 | `tooltip-dismiss.ts` | 触摸不会产生 `pointerleave`，宿主的 hover 提示会永久残留；补发宿主已在监听的离开事件；仅手机 |
 | 会话控件命中区 | `conversation-chrome.ts` | 宿主的消息操作/composer/`对话`·`轨迹` 命中区扩大到 35–43px（绘制尺寸不变）；会话标题让出空间（隐藏装饰性 `/` 与重复的模式标签、子代理 chip 折叠成图标）；底部指标行不再裁字（2026-09-12 新增）|
 | 设置页左右滑动 | `settings-swipe.ts` | 在宿主设置弹层内容区左右滑动切换分区（点相邻 tab；不抢垂直滚动；到头不回绕；仅手机，横竖屏都生效；2026-09-12 新增）|
 | 手机判定（含横屏） | `theme.ts` 的 `PHONE_MEDIA` | `(max-width: 768px), (max-height: 520px) and (pointer: coarse)`：横屏手机不再因为"够宽"而掉回桌面布局（2026-09-12 新增）|
@@ -257,6 +258,29 @@ if (navigator.clipboard?.writeText) { try { await writeText(t); return true } ca
 
 ---
 
+## 8c. 宿主的 hover 提示在手机上会永久残留
+
+**症状（实机截图）**：复制成功后，一个深色「复制」气泡停在输入框上方不消失。
+
+**根因**：宿主的消息操作用 hover 提示（`role="tooltip"`，气泡 `_bubble_*`）。触摸点击会合成 `pointerenter`，但**永远不会产生 `pointerleave`**，于是宿主的 hover-intent 打开气泡后就再也收不到"指针离开"。逐项实测（412×915，点「复制」后）：
+
+| 尝试 | 结果 |
+|---|---|
+| 等 1.2s / 3s / 6s / 8s | 气泡**一直在**，位置压在输入框上 |
+| blur 当前控件 | 无效 |
+| 焦点移到输入框 | 无效 |
+| 合成 `pointerdown` 到别处 | 无效 |
+| 在对话区真实点一下 | 有效（本质同下） |
+| 对锚点派发 `pointerout/pointerleave` | **有效** |
+
+**不是我们造成的**：把本插件 8 张样式表全部摘掉，气泡照样出现且照样残留；桌面视口下同样会出现，只是鼠标移开就正常消失。
+
+**修法**（`tooltip-dismiss.ts`，`FEATURES.tooltipDismiss`）：触摸交互后 1.2s，对每个可见 `[role="tooltip"]` 的锚点（`aria-describedby` 指向的元素，退化为气泡所在动作行里的按钮）派发宿主本来就在监听的 `pointerleave/pointerout`。**不隐藏任何东西、不伪造宿主状态**，只是把鼠标用户"移开"这个动作补给触摸设备；**仅手机生效**（桌面靠鼠标自己关闭）。
+
+**验证**：`tools/verify-tooltip-dismiss.mjs`（4 项，全 PASS）——手机：4.6s 后无残留气泡，且期间**确实出现过**提示（非空跑，取样抓到宿主自己的「复制成功」反馈）；桌面：提示照常出现且我们不去关它。
+
+---
+
 ## 9. 工具卡片
 
 - 替换 `pwsh / read / grep / edit / write` 的 shipped 卡片（`priority: -100`）  
@@ -340,6 +364,7 @@ node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行
 node tools/verify-swipe-and-landscape.mjs $url  # 设置页左右滑动切换分区 + 横屏手机保留移动端表面
 node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时「重试」且绝不导航 + 恢复自愈
 node tools/verify-clipboard-fallback.mjs $url   # 「复制」在 async clipboard 被拒时仍能写入真剪贴板
+node tools/verify-tooltip-dismiss.mjs $url      # 手机不残留 hover 提示；桌面不受影响
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠
 node tools/verify-keyboard-fit.mjs $url <out-dir>   # mock ≠ 真机
 ```

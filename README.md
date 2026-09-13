@@ -54,6 +54,8 @@ npm run bundle          # 重新构建（含反引号预检）
 
 **为什么「复制」要额外修**：DSH 的复制助手写成 `if (async 剪贴板可用) { try … catch { return false } }`，**只有 async API 不存在时才会走它自己的 legacy 兜底**。Android WebView 里 async 剪贴板通常是"存在但被拒"，于是它直接返回失败，而调用方失败即静默返回 —— 点「复制」什么都不会发生。本插件包一层 `navigator.clipboard.writeText`：真 API 仍先试，**只在被拒时**走宿主本来就写好的 legacy 路径（离屏 textarea + `execCommand('copy')`）。桌面不受影响（桌面上的被拒是真错误，应当暴露）。
 
+**同一次修复还收拾了提示残留**：复制成功后宿主会显示一个深色「复制成功」气泡，但触摸设备永远不会产生 `pointerleave`，这类 hover 提示会**永久停在输入框上方**（实机截图）。本插件在触摸交互后补发宿主本来就在监听的离开事件，提示显示约 1.2s 后自行消失；桌面照旧（鼠标移开即消失）。
+
 ## 开关
 
 `src/client/config.ts` 的 `FEATURES`：
@@ -68,6 +70,7 @@ npm run bundle          # 重新构建（含反引号预检）
 | `tetherCompat` | `true` | 抵消 tether 注入样式带来的两处排版事故 |
 | `typography` / `conversationChrome` / `settingsSwipe` | `true` | 字号字重 / 宿主会话控件命中区 / 设置页左右滑动 |
 | `clipboardFallback` | `true` | WebView 里 async 剪贴板被拒时接通宿主的 legacy 兜底（否则点「复制」静默失败） |
+| `tooltipDismiss` | `true` | 手机不残留 hover 提示（触摸没有 `pointerleave`，补发离开事件）；桌面不受影响 |
 | `resumeReconnect` | `true` | 回到前台自动重连 |
 | `keyboardDebug` / `replaceSidebar` | `false` | 诊断浮层 / 接管 sidebar（**后者与本项目硬约束冲突，勿开**） |
 
@@ -91,6 +94,7 @@ node tools/verify-render.mjs <url>              # 有浏览器时：逐项 CDP �
 | `verify-drawer-list` / `-new-session` / `-settings` / `-refresh` / `-windowing` / `verify-conn-dot` | 面板内容与状态 |
 | `verify-refresh-honesty` | 刷新连接换 socket；链路假活时改为「重试」且**不会导航**、恢复后自愈 |
 | `verify-clipboard-fallback` | 「复制」在 async 剪贴板被拒时仍写入真剪贴板；健康与桌面路径不受影响 |
+| `verify-tooltip-dismiss` | 手机不残留 hover 提示（期间确实出现过），桌面照常 |
 | `verify-tap-targets` / `verify-conversation-touch` | 手机控件命中区 ≥44px |
 | `verify-conversation-chrome` | 会话标题让位、底部指标行不裁字 |
 | `verify-settings-chrome` | 设置弹层：标题行不压 tab 条、320–430px 五个 tab 不需横滚 |

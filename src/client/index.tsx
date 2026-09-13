@@ -42,6 +42,7 @@ import { installConversationChrome } from './conversation-chrome.ts'
 import { installSettingsChrome } from './settings-chrome.ts'
 import { installSettingsSwipe } from './settings-swipe.ts'
 import { installClipboardFallback } from './clipboard-fallback.ts'
+import { installTooltipDismiss } from './tooltip-dismiss.ts'
 import { installTetherCompat } from './tether-compat.ts'
 import { installTypography } from './typography.ts'
 import { installKeyboardFit } from './viewport.ts'
@@ -147,6 +148,12 @@ export function apply(ctx: ClientContext): void {
   // the clipboard method and comes off with the plugin.
   if (FEATURES.clipboardFallback) {
     ctx.effect(() => installClipboardFallback(), 'mobile-ui: clipboard fallback')
+  }
+
+  // A tap never produces pointerleave, so host hover tooltips would stay on screen
+  // forever; this reports the leave the host is already waiting for.
+  if (FEATURES.tooltipDismiss) {
+    ctx.effect(() => installTooltipDismiss(), 'mobile-ui: tooltip dismiss')
   }
 
   // The drawer overlay. `shell.overlay` is a `list`, so this is additive: it

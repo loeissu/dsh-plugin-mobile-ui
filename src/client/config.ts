@@ -315,6 +315,16 @@ export const FEATURES = {
    */
   clipboardFallback: true,
   /**
+   * Stop the host's hover tooltips from sticking on a phone.
+   *
+   * A tap synthesises `pointerenter` but never `pointerleave`, so the host's hover
+   * tooltip opens and nothing closes it: measured still on screen 8s after tapping
+   * 复制, sitting over the composer. Dispatching the leave the host already listens
+   * for fixes it without hiding anything. Phones only (a desktop dismisses normally
+   * when the pointer moves). See `src/client/tooltip-dismiss.ts`.
+   */
+  tooltipDismiss: true,
+  /**
    * TEMPORARY. On-screen readout of the values that decide whether `keyboardFit`
    * can work at all: the live viewport heights, the smallest visual-viewport
    * height seen since load, and event counters.
