@@ -838,13 +838,40 @@ function bucketFor(updatedAt: number, now: number): Bucket {
   return 'earlier'
 }
 
-/** Relative age label for a session row. */
-function ageLabel(updatedAt: number, now: number): string {
+/**
+ * Whole calendar days between two instants, in local time.
+ *
+ * Rounded rather than floored: a DST day is 23 or 25 hours long, and flooring would
+ * turn "yesterday" into "0 天" or "2 天" twice a year.
+ * @param updatedAt - epoch milliseconds of the row.
+ * @param now - current epoch milliseconds.
+ * @returns at least 1 — a row under 昨天 / 更早 is never zero days old.
+ */
+function calendarDays(updatedAt: number, now: number): number {
+  const startOfDay = (ms: number): number => new Date(ms).setHours(0, 0, 0, 0)
+  return Math.max(1, Math.round((startOfDay(now) - startOfDay(updatedAt)) / DAY))
+}
+
+/**
+ * The unit follows the row's own bucket, not a fixed millisecond window.
+ *
+ * Mixing the two produced self-contradicting rows: the buckets cut at local
+ * midnight, so a session last touched at 23:30 sat under 「昨天」 while its label read
+ * 「1 小时」. A row in 今天 counts hours, a row in 昨天 / 更早 counts calendar days — the
+ * same basis as the group label above it.
+ * @param updatedAt - epoch milliseconds of the row.
+ * @param now - current epoch milliseconds.
+ * @param bucket - the group this row is rendered under; see {@link bucketFor}.
+ * @returns the age text.
+ */
+function ageLabel(updatedAt: number, now: number, bucket: Bucket): string {
   const age = now - updatedAt
   if (age < MINUTE) return t.ageJustNow
-  if (age < HOUR) return `${Math.floor(age / MINUTE)}${t.ageMinutes}`
-  if (age < DAY) return `${Math.floor(age / HOUR)}${t.ageHours}`
-  return `${Math.floor(age / DAY)}${t.ageDays}`
+  // bucketFor() only returns 'justNow' below one hour, so this stays sub-hour.
+  if (bucket === 'justNow') return `${Math.floor(age / MINUTE)}${t.ageMinutes}`
+  if (bucket === 'today') return `${Math.floor(age / HOUR)}${t.ageHours}`
+  if (bucket === 'yesterday') return `1${t.ageDays}`
+  return `${calendarDays(updatedAt, now)}${t.ageDays}`
 }
 
 /**
@@ -859,6 +886,26 @@ function redactSecrets(title: string): string {
   return title
     .replace(/\bgh[pousr]_[A-Za-z0-9]{20,}/g, (m) => `${m.slice(0, 7)}…${m.slice(-4)}`)
     .replace(/\bgithub_pat_[A-Za-z0-9_]{20,}/g, (m) => `${m.slice(0, 12)}…${m.slice(-4)}`)
+}
+
+/**
+ * The tracked touch, or `undefined` when it is no longer in the list.
+ *
+ * Deliberately an index walk, not `[...touches].find(...)`: `TouchList` is only an
+ * array-like, and iterating it needs `Symbol.iterator` to be implemented. On an
+ * engine that lacks it the spread throws inside the gesture handler — the drag stops
+ * working and every `touchmove` produces an error, instead of degrading to "the row
+ * was not found". Index access is the one interface the spec guarantees.
+ * @param list - the event's touch list.
+ * @param id - `identifier` of the touch being tracked.
+ * @returns the matching touch, if present.
+ */
+function touchById(list: TouchList, id: number): Touch | undefined {
+  for (let i = 0; i < list.length; i += 1) {
+    const candidate = list.item(i)
+    if (candidate !== null && candidate.identifier === id) return candidate
+  }
+  return undefined
 }
 
 /**
@@ -912,8 +959,11 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   // Depend on the two callbacks, not on `props`: the renderer builds the prop
   // object fresh on every render (`{ ...kit, ...injected, ...ownerProps }`), so
   // `[props]` tore down and re-added the connection subscription on every drawer
-  // render while a session was streaming.
-  const { getConnectionState, subscribeConnection } = props
+  // render while a session was streaming. `reconnect` is destructured for the same
+  // reason — it is read from inside an effect below, and reaching for it through
+  // `props` there would make that effect re-run (and restart its cadence) on every
+  // parent render. Both come from the injected face, which the renderer memoises.
+  const { getConnectionState, subscribeConnection, reconnect } = props
   useEffect(() => {
     const sync = (): void => { setConnState(getConnectionState?.()) }
     sync()
@@ -981,12 +1031,12 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       if (document.visibilityState !== 'visible') return
       void probeLink().then((alive) => {
         setLinkDead(!alive)
-        if (alive) props.reconnect?.()
+        if (alive) reconnect?.()
       })
     }
     document.addEventListener('visibilitychange', onVisible)
     return () => { document.removeEventListener('visibilitychange', onVisible) }
-  }, [probeLink])
+  }, [probeLink, reconnect])
 
   /**
    * Self-heal while the link is dead, by RETRYING — never by navigating.
@@ -1016,7 +1066,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
         if (cancelled) return
         if (alive) {
           setLinkDead(false)
-          props.reconnect?.()
+          reconnect?.()
           return
         }
         timer = window.setTimeout(attempt, attempts < 15 ? LINK_RETRY_MS : LINK_RETRY_SLOW_MS)
@@ -1028,7 +1078,12 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       cancelled = true
       if (timer !== undefined) window.clearTimeout(timer)
     }
-  }, [linkDead, probeLink, props])
+    // `props` is deliberately absent, for the reason stated above the connection
+    // subscription: its identity changes on every render, and an effect that re-runs
+    // restarts `attempts` — which would reset the 4s cadence to its first step and
+    // the 60s patience gate would never be reached. `probeLink` and `reconnect` are
+    // both stable, so this effect runs when the dead state changes and not before.
+  }, [linkDead, probeLink, reconnect])
 
   /**
    * Refresh is "busy" until the wire confirms the reconnect.
@@ -1258,7 +1313,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
   const onPanelTouchMove = (e: ReactTouchEvent): void => {
     const d = dragRef.current
     if (d === null || !open) return
-    const t0 = [...e.touches].find((t) => t.identifier === d.id)
+    const t0 = touchById(e.touches, d.id)
     if (t0 === undefined) return
     const dx = t0.clientX - d.x0
     const dy = t0.clientY - d.y0
@@ -1341,6 +1396,26 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
     title.style.setProperty('--dsh-mobile-marquee-duration', `${Math.min(20, Math.max(6, distance / 22)).toFixed(1)}s`)
   }, [open, current, grouped])
 
+  // Closed-state layers are `inert`: on a phone the drawer subtree is always
+  // rendered (off-canvas, `pointer-events: none`), so without it the panel's dozens
+  // of controls stay in the tab order and in the accessibility tree while invisible
+  // off the left edge. The scrim is click-to-close, so it is only inert while closed.
+  //
+  // Set imperatively rather than as a JSX prop, because the prop's meaning is not
+  // version-stable: React 18 passes an unknown string attribute straight through, so
+  // `inert={open ? undefined : ''}` renders `inert=""`; React 19 treats `inert` as a
+  // BOOLEAN prop, where the empty string is falsy and the attribute would be dropped
+  // — the same code would silently stop working on a host that upgraded React. The
+  // attribute itself is the contract, so the attribute is what is written here.
+  const scrimRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    for (const el of [scrimRef.current, panelRef.current]) {
+      if (el === null) continue
+      if (open) el.removeAttribute('inert')
+      else el.setAttribute('inert', '')
+    }
+  }, [open])
+
   const loading = wsPhase === 'pending' || sessPhase === 'pending'
 
   const overlay = (
@@ -1361,12 +1436,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
       <div
         className="dsh-mobile-drawer-scrim"
         data-dsh-mobile-ui="drawer-scrim"
-        /* Both closed-state layers are `inert`: on a phone the drawer subtree is
-           always rendered (off-canvas, pointer-events none), so without this the
-           panel's dozens of controls stay in the tab order and the accessibility
-           tree while invisible off the left edge. The scrim is click-to-close, so it
-           is only inert while closed — when open it must stay hittable. */
-        inert={open ? undefined : ''}
+        ref={scrimRef}
         onClick={() => { setOpen(false) }}
       />
 
@@ -1386,10 +1456,6 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
            claiming modality would overstate it. */
         role="navigation"
         aria-label={t.drawerTitle}
-        /* Closed: off-canvas and unfocusable (see the scrim above). The panel is
-           not wrapped in an extra element, so this is the one place the state has to
-           be stated. */
-        inert={open ? undefined : ''}
         onTouchStart={onPanelTouchStart}
         onTouchMove={onPanelTouchMove}
         onTouchEnd={onPanelTouchEnd}
@@ -1474,7 +1540,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                       {s.running || s.completed === true
                         ? <span className="dsh-mobile-sess-state" data-state={s.running ? 'running' : 'done'} aria-hidden="true" />
                         : null}
-                      <span>{ageLabel(s.updatedAt, now)}</span>
+                      <span>{ageLabel(s.updatedAt, now, group.bucket)}</span>
                     </span>
                   </button>
                 ))}
@@ -1546,7 +1612,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
                 void probeLink().then((alive) => {
                   if (alive) {
                     setLinkDead(false)
-                    props.reconnect?.()
+                    reconnect?.()
                   }
                   setReconnecting(false)
                 })
@@ -1558,7 +1624,7 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
               setLinkDead(false)
               // Official recovery: abort the current attempt and start retry 1.
               // Keeps the drawer open so the user sees the spinner complete.
-              props.reconnect?.()
+              reconnect?.()
               // Safety cap only. The busy state normally ends the moment the wire
               // reports connected (see the effect above); it used to be a blind
               // 1.2s timer that reported success over a dead connection.
@@ -1591,7 +1657,10 @@ export function DrawerOverlay(props: DrawerOverlayProps) {
               <path d="M14.5 8.2A5.6 5.6 0 1 1 12.4 4" />
               <path d="M12.2 1.8v3.2h3.2" />
             </svg>
-            <span>{refreshBusy ? t.drawerRefreshed : linkDead ? t.drawerRetry : t.drawerRefresh}</span>
+            {/* The dead state owns the label while it is up, so a failed probe never
+                masquerades as a completed refresh; only a healthy, idle button says
+                刷新连接, and a healthy button mid-reconnect says 刷新中. */}
+            <span>{linkDead ? t.drawerRetry : refreshBusy ? t.drawerRefreshing : t.drawerRefresh}</span>
           </button>
         </div>
       </div>

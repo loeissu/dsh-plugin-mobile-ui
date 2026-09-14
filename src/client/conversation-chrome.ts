@@ -142,7 +142,33 @@ const CSS = `
   [data-slot="conversation.session.header"] [class*="_separator"] {
     display: none;
   }
-  [data-slot="conversation.session.header"] [class*="_headerActions"] [class*="_label"] {
+  /* The mode chip's label — and nothing else.
+   *
+   * Measured on a live session at 412x915, the actions area is exactly this:
+   *
+   *   div.wSkVaW_headerActions
+   *     └ div[data-slot="conversation.session.header.actions"]   (display: contents)
+   *         ├ span.SVAs4q_label                          "标准模式"  ← hide this
+   *         └ div.QsffPG_root > button.QsffPG_trigger    "1 个后台任务运行中"  ← keep
+   *
+   * so there is exactly ONE _label there and it is the chip this rule is about.
+   * The chip's icon is a CHILD of the label (measured: the span's only child is an
+   * svg.SVAs4q_icon), so hiding the label drops icon+text together — which is the
+   * intent, and it hands the whole 150px of the actions slot to the background-task
+   * chip.
+   *
+   * The selector is an anchored DIRECT CHILD of the host's published
+   * conversation.session.header.actions slot, not a descendant of the hashed
+   * _headerActions. The rule used to be
+   *   [class*="_headerActions"] [class*="_label"]
+   * which would silently hide ANY _label the host ever puts in that wrapper. The
+   * slot anchor is the documented extension surface (it also survives CSS-Module
+   * hash rotation), and a child combinator cannot reach a control nested deeper
+   * inside the slot.
+   * Cost of the narrower form: if the host ever wraps its chip in another element,
+   * the chip simply comes back — a little less title room, instead of a silent hide
+   * of something this rule was never about. */
+  [data-slot="conversation.session.header.actions"] > [class*="_label"] {
     display: none;
   }
   /* The chip's own text span (the icon is an svg sibling and stays).

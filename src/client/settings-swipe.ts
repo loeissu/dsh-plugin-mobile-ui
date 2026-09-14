@@ -84,7 +84,17 @@ export function installSettingsSwipe(): () => void {
 
   const onMove = (event: TouchEvent): void => {
     if (start === null) return
-    const touch = [...event.touches].find((t) => t.identifier === start?.id)
+    // Index walk, not `[...event.touches].find(...)`: `TouchList` iteration needs
+    // `Symbol.iterator`, and a spread that throws would abort the gesture mid-swipe on
+    // an engine without it. `item()` is the accessor the spec guarantees.
+    let touch: Touch | undefined
+    for (let i = 0; i < event.touches.length; i += 1) {
+      const candidate = event.touches.item(i)
+      if (candidate !== null && candidate.identifier === start.id) {
+        touch = candidate
+        break
+      }
+    }
     if (touch === undefined) return
     dx = touch.clientX - start.x
     const dy = touch.clientY - start.y

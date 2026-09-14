@@ -64,6 +64,35 @@ await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, devi
 await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
+// This suite measures the HOST's session header, so it needs a session actually
+// open. Navigating alone is NOT enough: on the hero screen the header slot exists
+// but its <header> is `headerHidden` and empty (measured at 412x915), and every
+// "not present in this session" tolerance below then turns into a silent pass —
+// the suite reports green while measuring nothing. So open a session the way the
+// clipboard suite does, and only if none was restored.
+const headerReady = async () => (await ev(`(() => {
+  const h = document.querySelector('[data-slot="conversation.session.header"] header')
+  if (h === null || h.className.includes('Hidden')) return false
+  return h.querySelector('[class*="_crumbs"]') !== null
+})()`)) === true
+
+if (!(await headerReady())) {
+  await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')?.click()`)
+  await sleep(1200)
+  const picked = await ev(`(() => {
+    const row = document.querySelector('.dsh-mobile-sess')
+    if (row === null) return false
+    row.click(); return true
+  })()`)
+  if (picked !== true) {
+    throw new Error('cannot run: no session could be opened (no .dsh-mobile-sess row in the drawer)')
+  }
+  for (let i = 0; i < 20 && !(await headerReady()); i += 1) await sleep(500)
+}
+check(await headerReady(),
+  'a session is open and its header rendered (precondition for every measurement below)',
+  'the hero screen has an empty, aria-hidden header — without a session this suite measures nothing')
+
 for (const width of [412, 360]) {
   await send('Emulation.setDeviceMetricsOverride', { width, height: 915, deviceScaleFactor: 2, mobile: true })
   await sleep(900)
@@ -84,7 +113,11 @@ for (const width of [412, 360]) {
   check(m.chipClippedBy === 0 || absent(m.chipClippedBy),
     `@${width} the subagents chip is not cut mid-word`,
     `clipped ${m.chipClippedBy}px${absent(m.chipClippedBy) ? ' (chip not present in this session)' : ''}`)
-  check(m.crumbClippedBy <= 20, `@${width} the session title loses at most 20px`, `clipped ${m.crumbClippedBy}px`)
+  // The crumb is the subject of this suite, so its absence is a failure, not a
+  // tolerance: `null <= 20` is true, which is how this assertion used to pass
+  // without measuring anything.
+  check(m.crumbClippedBy !== null && m.crumbClippedBy <= 20,
+    `@${width} the session title loses at most 20px`, `clipped ${m.crumbClippedBy}px`)
   // The title's absolute width is SESSION-STATE dependent (a subagent session, a
   // deliverables chip or a plan chip all change the row), so a fixed floor measured
   // the open session, not this plugin: it read 226px on one session and 76px on
@@ -117,8 +150,12 @@ for (const width of [412, 360]) {
     check(true, `@${width} and they give it measurably more room in this session`,
       `+${m.crumbsWidth - stripped.width}px`)
   }
-  check(m.labelClips.every((c) => c === 0), `@${width} no metric label is clipped`, `clips ${JSON.stringify(m.labelClips)}`)
-  check(m.labelSizes.every((s) => s === '12px'), `@${width} metric labels use the 12px caption step`, JSON.stringify(m.labelSizes))
+  // `[].every(…)` is true, so an empty label list used to satisfy both of these
+  // without a single label on screen. Require evidence.
+  check(m.labelClips.length > 0 && m.labelClips.every((c) => c === 0),
+    `@${width} no metric label is clipped`, `${m.labelClips.length} label(s), clips ${JSON.stringify(m.labelClips)}`)
+  check(m.labelSizes.length > 0 && m.labelSizes.every((s) => s === '12px'),
+    `@${width} metric labels use the 12px caption step`, `${m.labelSizes.length} label(s) ${JSON.stringify(m.labelSizes)}`)
   if (width === 412) {
     check(m.dockWrap === 'nowrap' && m.dockHeight <= 30, '@412 the metrics row stays on one line', `wrap=${m.dockWrap} height=${m.dockHeight}`)
   } else {

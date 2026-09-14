@@ -77,6 +77,14 @@ function legacyCopy(text: string): boolean {
 }
 
 /**
+ * Marker put on the wrapper, so a second install can tell "already wrapped" from
+ * "the host's own method". Without it the module's claim of being idempotent was
+ * false: a second install would wrap the wrapper, and the first disposer would then
+ * have to unpick a stack it no longer owns.
+ */
+const WRAPPED = '__dshMobileUiWrapped'
+
+/**
  * Install the fallback. Idempotent per page; disposed with the plugin.
  * @returns disposer restoring the original method.
  */
@@ -87,14 +95,21 @@ export function installClipboardFallback(): () => void {
     // Without the async API the host already takes its legacy path by itself.
     return () => {}
   }
-  const original = clip.writeText.bind(clip)
+  // The method lives on `Clipboard.prototype`, so an install adds an OWN property that
+  // shadows it. Whether the own property existed before decides how to put it back.
+  const wasOwn = Object.prototype.hasOwnProperty.call(clip, 'writeText')
+  const previous = clip.writeText as Clipboard['writeText'] | undefined
+  if (typeof previous !== 'function') return () => {}
+  if ((previous as unknown as Record<string, unknown>)[WRAPPED] === true) return () => {}
+  const invoke = previous.bind(clip)
 
   const patched = (text: string): Promise<void> =>
-    original(text).catch((error: unknown) => {
+    invoke(text).catch((error: unknown) => {
       if (!window.matchMedia(PHONE_MEDIA).matches) throw error
       if (legacyCopy(text)) return
       throw error
     })
+  ;(patched as unknown as Record<string, unknown>)[WRAPPED] = true
 
   try {
     clip.writeText = patched
@@ -106,7 +121,12 @@ export function installClipboardFallback(): () => void {
 
   return () => {
     try {
-      clip.writeText = original
+      // Restore the exact previous value when it was an own property; otherwise delete
+      // the shadow so the prototype's method is visible again. Assigning the bound copy
+      // back (the old behaviour) left `navigator.clipboard.writeText` permanently
+      // different from `Clipboard.prototype.writeText` after an uninstall.
+      if (wasOwn) clip.writeText = previous
+      else delete (clip as { writeText?: unknown }).writeText
     } catch {
       // Restoring is best-effort; the plugin is going away either way.
     }

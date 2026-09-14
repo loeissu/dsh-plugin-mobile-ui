@@ -137,7 +137,7 @@ export const inject = ['slots', 'layout', 'uiWorkspace', 'connection']
 
 ```
 src/index.ts                 插件入口声明（5 行）
-src/client/                  17 个模块，约 5.0k 行
+src/client/                  18 个模块，约 5.7k 行
   index.tsx                  apply()：注册表面 + 装配各模块
   config.ts                  FEATURES 开关 + zh/en 文案（两套字典键完全一致）
   theme.ts                   设计 token（全部取 DSH 的 --dsw-alias-*）、PHONE_MEDIA、injectStyles

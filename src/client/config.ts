@@ -44,6 +44,13 @@ export interface Copy {
   readonly settingsAbout: string
   readonly settingsVersion: string
   readonly settingsFollowSystem: string
+  /**
+   * Label for the row whose VALUE is `FEATURES.toolCards.length`.
+   *
+   * It must name the count, not the behaviour behind it: the row originally read
+   * 「工具卡片默认展开」 ("expand tool cards by default") while printing a number, so the
+   * label and the value disagreed about what the reader was looking at.
+   */
   readonly settingsToolCards: string
   readonly settingsResetSplash: string
   readonly settingsReplay: string
@@ -56,7 +63,16 @@ export interface Copy {
   readonly drawerClose: string
   readonly drawerSettings: string
   readonly drawerRefresh: string
-  readonly drawerRefreshed: string
+  /**
+   * Shown while a manual refresh is still waiting for the wire.
+   *
+   * The button used to display 「已刷新」 the instant it was tapped — the busy label and
+   * the success label were the same string — so it announced success up to 4s before
+   * the connection state confirmed anything. There is no success string any more:
+   * when the wire comes back the button simply returns to {@link drawerRefresh},
+   * which is the only state the host actually reports.
+   */
+  readonly drawerRefreshing: string
   /**
    * Shown instead of the reconnect label when the page's own transport is dead.
    *
@@ -114,7 +130,7 @@ const ZH: Copy = {
   settingsAbout: '关于',
   settingsVersion: '版本',
   settingsFollowSystem: '跟随系统主题',
-  settingsToolCards: '工具卡片默认展开',
+  settingsToolCards: '工具卡片（替换式）',
   settingsResetSplash: '重放启动页',
   settingsReplay: '重放',
   settingsFootnote: '这些界面的所有颜色都取自 DSH 自己的 --dsw-alias-* 语义 token，因此浅色与深色自动跟随宿主主题。本插件只往插槽里追加内容；除非显式配置，否则不会替换 DSH 自带的界面。',
@@ -126,7 +142,7 @@ const ZH: Copy = {
   drawerClose: '关闭',
   drawerSettings: '设置',
   drawerRefresh: '刷新连接',
-  drawerRefreshed: '已刷新',
+  drawerRefreshing: '刷新中…',
   drawerRetry: '重试',
   drawerRetryHint: '链路已断：正在自动重试，恢复后会自动接上',
   drawerNewSession: '新建会话',
@@ -170,7 +186,7 @@ const EN: Copy = {
   settingsAbout: 'About',
   settingsVersion: 'Version',
   settingsFollowSystem: 'Follow system theme',
-  settingsToolCards: 'Expand tool cards by default',
+  settingsToolCards: 'Tool cards (replacing host)',
   settingsResetSplash: 'Replay the splash',
   settingsReplay: 'Replay',
   settingsFootnote: 'Every color on these surfaces comes from DSH\u2019s own --dsw-alias-* semantic tokens, so light and dark follow the host theme. This plugin only adds to slots; it never replaces a shipped surface unless explicitly configured.',
@@ -182,7 +198,7 @@ const EN: Copy = {
   drawerClose: 'Close',
   drawerSettings: 'Settings',
   drawerRefresh: 'Reconnect',
-  drawerRefreshed: 'Refreshed',
+  drawerRefreshing: 'Reconnecting…',
   drawerRetry: 'Retry',
   drawerRetryHint: 'Link down — retrying automatically; it reconnects on its own',
   drawerNewSession: 'New session',

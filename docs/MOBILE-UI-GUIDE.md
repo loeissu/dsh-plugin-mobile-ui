@@ -96,6 +96,8 @@ tetherCompat: true
 typography: true
 conversationChrome: true      // 宿主会话控件的命中层（只改命中区，不改绘制）
 settingsSwipe: true           // 设置弹层左右滑动切换分区（仅手机）
+clipboardFallback: true      // 复制兜底：async 剪贴板被拒时接通宿主自己的 legacy 路径（仅手机）
+tooltipDismiss: true         // 触摸没有 pointerleave，补发宿主已在监听的离开事件，避免 hover 提示残留（仅手机）
 resumeReconnect: true
 keyboardDebug: false          // 临时诊断，默认关
 toolCards: ['pwsh', 'read', 'grep', 'edit', 'write']
@@ -352,7 +354,7 @@ node tools/verify-drawer-open.mjs $url
 node tools/verify-drawer-overlay.mjs $url <out-dir>
 node tools/verify-drawer-settings.mjs $url <out-dir>
 node tools/verify-drawer-swipe.mjs $url
-node tools/verify-drawer-push.mjs $url      # 若再启用推挤模式
+node tools/retired/verify-drawer-push.mjs $url   # 已退役（推挤模式被让位模式取代）；仅考古用
 node tools/verify-conn-dot.mjs $url
 node tools/verify-drawer-refresh.mjs $url
 node tools/verify-resume-reconnect.mjs $url
@@ -366,6 +368,7 @@ node tools/verify-conversation-chrome.mjs $url  # 会话标题空间 + 底部指
 node tools/verify-settings-chrome.mjs $url      # 宿主设置弹层：标题行控件不压 tab 条、五个 tab 不需横滚
 node tools/verify-swipe-and-landscape.mjs $url  # 设置页左右滑动切换分区 + 横屏手机保留移动端表面
 node tools/verify-refresh-honesty.mjs $url      # 刷新连接：换 socket + 假活时「重试」且绝不导航 + 恢复自愈
+node tools/verify-link-retry-cadence.mjs $url   # 断链重试节奏：~4s×15 次后升级到 ~15s（跑满约 90s，是这里最慢的一个）
 node tools/verify-clipboard-fallback.mjs $url   # 「复制」在 async clipboard 被拒时仍能写入真剪贴板
 node tools/verify-tooltip-dismiss.mjs $url      # 手机不残留 hover 提示；桌面不受影响
 node tools/verify-nav-tab-locale.mjs $url       # 中英文下「导航」预留与宿主首个 tab 不重叠

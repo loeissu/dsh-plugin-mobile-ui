@@ -22,7 +22,8 @@
  */
 const appUrl = process.argv[2]
 const origin = new URL(appUrl).origin
-const cdp = 'http://127.0.0.1:9222'
+// The debugger endpoint is overridable so the suite is not welded to one port.
+const cdp = process.env.CDP_URL ?? 'http://127.0.0.1:9222'
 
 // Grant clipboard read/write so the assertions can read back what was copied.
 const version = await (await fetch(`${cdp}/json/version`)).json()
@@ -33,7 +34,18 @@ browserWs.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && bp.has(
 const bsend = (method, params = {}) => new Promise((r) => { const i = ++bid; bp.set(i, r); browserWs.send(JSON.stringify({ id: i, method, params })) })
 await bsend('Browser.grantPermissions', { origin, permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] })
 
-const t = (await (await fetch(`${cdp}/json/list`)).json()).find((x) => x.type === 'page' && x.url.includes('3080'))
+// Pick the app page by the HOST:PORT of the URL this suite was handed, never by a
+// hardcoded port. Two reasons: with the port baked in the suite could not run at all
+// on another dev port, and — the reason it could not be run standalone — before the
+// first navigation the page target is still `about:blank`, so a URL filter matched
+// nothing and the run died on `undefined`. Preference: the app's own origin, then any
+// page. It navigates itself in boot(), so any page target will do.
+const hostPort = new URL(appUrl).host
+const pages = (await (await fetch(`${cdp}/json/list`)).json()).filter((x) => x.type === 'page')
+const t = pages.find((x) => x.url.includes(hostPort)) ?? pages[0]
+if (t === undefined) {
+  throw new Error(`no page target on ${cdp} — start Chrome with a --remote-debugging-port and a blank page`)
+}
 const ws = new WebSocket(t.webSocketDebuggerUrl)
 const p = new Map(); let id = 0
 await new Promise((r, j) => { ws.onopen = r; ws.onerror = j })
@@ -59,6 +71,12 @@ const check = (ok, label, detail = '') => {
 }
 
 await send('Runtime.enable'); await send('Page.enable')
+// Headless Chrome reports the document as unfocused after a navigation, and the
+// Clipboard API refuses to read in that state ("Document is not focused"). The very
+// first readText() then returns `__read_failed__` while a later one (after the tap
+// focused the page) succeeds — which phase 3 used to report as "the clipboard
+// changed". A real user's tab is focused, so force that state here.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true })
 
 /** Boot the app with the async clipboard already failing (or not), and open a session. */
 const boot = async ({ rejectAsync, touch, width, height }) => {
@@ -85,7 +103,16 @@ const boot = async ({ rejectAsync, touch, width, height }) => {
   await sleep(9000)
   await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')?.click()`)
   await sleep(1200)
-  await ev(`document.querySelector('.dsh-mobile-sess')?.click()`)
+  // Not `?.`: if no session row exists the suite would go on to measure an empty
+  // conversation and fail on the clipboard assertions with a misleading reason.
+  const opened = await ev(`(() => {
+    const row = document.querySelector('.dsh-mobile-sess')
+    if (row === null) return false
+    row.click(); return true
+  })()`)
+  if (opened !== true) {
+    throw new Error('no session could be opened: the drawer rendered no .dsh-mobile-sess row')
+  }
   await sleep(4500)
 }
 
@@ -167,9 +194,18 @@ console.log('\n## 3. desktop viewport, async clipboard rejects')
 await boot({ rejectAsync: true, touch: false, width: 1440, height: 900 })
 const r3 = await tapCopy()
 console.log('  landed on:', r3.landed, ' async attempts:', r3.asyncCalls, ' legacy calls:', r3.execCalls)
+console.log('  clipboard  :', JSON.stringify(String(r3.clip).slice(0, 40)))
+console.log('  before     :', JSON.stringify(String(r3.before).slice(0, 40)))
 check(r3.asyncCalls !== null && r3.asyncCalls >= 1, 'the desktop tap still tries the async API', `writeText calls=${r3.asyncCalls}`)
 check(r3.execCalls === 0, 'and is NOT papered over with the legacy path (desktop semantics unchanged)', `execCommand=${r3.execCalls}`)
-check(String(r3.clip) === String(r3.before), 'nothing new reached the clipboard on the desktop', `${String(r3.clip).slice(0, 20)}`)
+// A failed READ makes the equality below meaningless (it compares a sentinel against
+// real text and reports it as "the clipboard changed"), so prove both reads worked
+// first — otherwise this assertion blames the product for a clipboard-access problem.
+const readState = (v) => JSON.stringify(String(v).slice(0, 24))
+check(!String(r3.before).startsWith('__read_failed__') && !String(r3.clip).startsWith('__read_failed__'),
+  'both desktop clipboard reads succeeded', `before=${readState(r3.before)} clip=${readState(r3.clip)}`)
+check(String(r3.clip) === String(r3.before), 'nothing new reached the clipboard on the desktop',
+  `before=${readState(r3.before)} clip=${readState(r3.clip)}`)
 
 await bsend('Browser.resetPermissions')
 ws.close(); browserWs.close()

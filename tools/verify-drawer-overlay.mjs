@@ -115,6 +115,14 @@ const STATE = `(() => {
     scrimOpacity: scrim ? getComputedStyle(scrim).opacity : null,
     scrimPointerEvents: scrim ? getComputedStyle(scrim).pointerEvents : null,
     triggerPointerEvents: trigger ? getComputedStyle(trigger).pointerEvents : null,
+    // The closed subtree is inert, which is what keeps the panel's dozens of controls
+    // out of the tab order and the accessibility tree while it sits invisible off the
+    // left edge. Read as an ATTRIBUTE, not a style: it was written as a JSX prop and
+    // React 19 (which treats inert as a boolean prop, where the empty string is falsy)
+    // silently dropped it, so the only thing worth asserting is whether the attribute
+    // is on the element.
+    panelInert: panel ? panel.hasAttribute('inert') : null,
+    scrimInert: scrim ? scrim.hasAttribute('inert') : null,
     triggerHitTestOk: triggerHit,
     elementAtCentre: hitTag,
     centreInsideOverlay,
@@ -158,6 +166,11 @@ check(closed.panelPointerEvents === 'none',
   'CLOSED drawer does not capture pointer events', `panel pointer-events=${closed.panelPointerEvents}`)
 check(closed.scrimPointerEvents === 'none',
   'CLOSED scrim does not capture pointer events', `scrim pointer-events=${closed.scrimPointerEvents}`)
+check(closed.panelInert === true,
+  'CLOSED panel is inert (controls leave the tab order and the a11y tree)',
+  `inert=${closed.panelInert}`)
+check(closed.scrimInert === true,
+  'CLOSED scrim is inert', `inert=${closed.scrimInert}`)
 check(closed.centreInsideOverlay === false,
   'a tap at the centre reaches the application, not the overlay',
   `${closed.elementAtCentre} (insideOverlay=${closed.centreInsideOverlay})`)
@@ -177,6 +190,11 @@ console.log(`  ${JSON.stringify(open, null, 1)}`)
 check(open.open === 'true', 'trigger opened the drawer')
 check(open.panelPointerEvents === 'auto', 'OPEN panel accepts taps')
 check(open.scrimPointerEvents === 'auto', 'OPEN scrim accepts taps (dismissable)')
+// The other half of the contract: an inert panel would be visible but unusable.
+check(open.panelInert === false, 'OPEN panel is NOT inert (its controls are reachable)',
+  `inert=${open.panelInert}`)
+check(open.scrimInert === false, 'OPEN scrim is NOT inert (it is the tap-to-close layer)',
+  `inert=${open.scrimInert}`)
 check(open.panelWidth > 0, 'panel has a width', `${open.panelWidth}px`)
 // The panel is `min(72%, 300px)`. Narrower than the prototype's 80% on purpose:
 // the drawer is dismissed by tapping the scrim, so a full-height panel at 80%
@@ -199,6 +217,9 @@ const reclosed = JSON.parse(await evaluate(STATE))
 check(reclosed.open === 'false', 'scrim tap closed the drawer')
 check(reclosed.panelPointerEvents === 'none',
   'panel returned to click-through after closing', `pointer-events=${reclosed.panelPointerEvents}`)
+check(reclosed.panelInert === true && reclosed.scrimInert === true,
+  'and the closed subtree is inert again (the guard is re-applied, not one-shot)',
+  `panel=${reclosed.panelInert} scrim=${reclosed.scrimInert}`)
 check(reclosed.centreInsideOverlay === false,
   'taps reach the application again after closing',
   `${reclosed.elementAtCentre} (insideOverlay=${reclosed.centreInsideOverlay})`)

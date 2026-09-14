@@ -168,7 +168,14 @@ const CSS = `
 }
 `
 
-/** Fallback label shown when a seat renders nothing. */
+/**
+ * One titled group in the column: a heading plus whatever the slot handed over.
+ *
+ * It renders no fallback of its own — an empty seat simply renders nothing.
+ * @param props.heading - the visible group title.
+ * @param props.children - the seats declared for this group.
+ * @returns the group element.
+ */
 function Section({ heading, children }: { heading: string, children: unknown }) {
   return (
     <div className="dsh-mobile-drawer__section">

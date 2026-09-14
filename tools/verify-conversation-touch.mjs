@@ -59,6 +59,47 @@ await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, devi
 await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
+// This suite measures the HOST's controls inside a conversation, and `visible()`
+// rejects anything outside the viewport — so it needs a session open AND its
+// messages on screen. On the hero screen the header slot exists but is empty
+// (`headerHidden`) and every group reports `missing`. Doing both steps here makes
+// the run independent of whatever state a previous suite left in the shared browser.
+const headerReady = async () => (await ev(`(() => {
+  const h = document.querySelector('[data-slot="conversation.session.header"] header')
+  if (h === null || h.className.includes('Hidden')) return false
+  return h.querySelector('[class*="_crumbs"]') !== null
+})()`)) === true
+
+if (!(await headerReady())) {
+  await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')?.click()`)
+  await sleep(1200)
+  const picked = await ev(`(() => {
+    const row = document.querySelector('.dsh-mobile-sess')
+    if (row === null) return false
+    row.click(); return true
+  })()`)
+  if (picked !== true) {
+    throw new Error('cannot run: no session could be opened (no .dsh-mobile-sess row in the drawer)')
+  }
+  for (let i = 0; i < 20 && !(await headerReady()); i += 1) await sleep(500)
+}
+
+// Bring the newest message actions into view: scroll the largest scrollable box
+// (the transcript) to its end. Env-dependent, so its absence is reported rather
+// than asserted — the groups below still fail loudly if nothing is on screen.
+const scrolled = await ev(`(() => {
+  const boxes = [...document.querySelectorAll('*')].filter((e) => {
+    const cs = getComputedStyle(e)
+    return /(auto|scroll)/.test(cs.overflowY) && e.scrollHeight - e.clientHeight > 40
+  })
+  const box = boxes.sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0]
+  if (box === undefined) return false
+  box.scrollTop = box.scrollHeight
+  return true
+})()`)
+if (scrolled !== true) console.log('note: no scrollable transcript found; measuring whatever is already in view')
+await sleep(1500)
+
 const m = JSON.parse(await ev(MEASURE))
 // Each floor is the value the layout actually allows, not a wish: the walk
 // measures a nominal box one pixel short (the far edge is exclusive), and two

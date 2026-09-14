@@ -139,9 +139,20 @@ export function installKeyboardFit(): () => void {
   injectStyles(STYLE_ID, CSS)
   const restoreViewportMeta = pinInteractiveWidget()
 
-  if (typeof window === 'undefined') return () => {}
+  // Both bail-outs below must UNDO `pinInteractiveWidget()` before returning: this
+  // module rewrites an element it does not own, and the meta tag it edits lives for
+  // the rest of the page's life. Returning a no-op disposer with the rewrite still in
+  // place left the host's viewport declaration permanently changed for a feature that
+  // is not running — the opposite of what its own comment promises.
+  if (typeof window === 'undefined') {
+    restoreViewportMeta()
+    return () => {}
+  }
   const vv = window.visualViewport
-  if (vv === undefined || vv === null) return () => {}
+  if (vv === undefined || vv === null) {
+    restoreViewportMeta()
+    return () => {}
+  }
 
   const root = document.documentElement
   /** Highest layout height seen since the last orientation change. */

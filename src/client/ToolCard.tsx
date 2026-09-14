@@ -298,15 +298,6 @@ function blockArgs(block: SettledBlock | RunningBlock): string {
  * when it does not parse, because window truncation and unknown tools can both
  * produce other shapes.
  * @param raw - raw argument text.
- * @returns the salient detail, or an empty string when none is recognisable.
- */
-/**
- * Build a one-line summary from the raw arguments.
- *
- * `argsRaw` is a JSON string in the normal case, but is treated as opaque text
- * when it does not parse, because window truncation and unknown tools can both
- * produce other shapes.
- * @param raw - raw argument text.
  * @param cwd - session workspace root, for path shortening.
  * @param home - host home directory, for path shortening.
  * @returns the salient detail, or an empty string when none is recognisable.

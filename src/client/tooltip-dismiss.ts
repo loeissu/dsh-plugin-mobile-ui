@@ -36,6 +36,31 @@ import { PHONE_MEDIA } from './theme.ts'
 const TOOLTIP_LINGER_MS = 1200
 
 /**
+ * Build the leave event the host is listening for.
+ *
+ * Prefers `PointerEvent` because that is what the host's hover-intent hooks receive
+ * on a real pointer device, and falls back to `MouseEvent` — which carries the same
+ * coordinates-less shape and is also listened for — on engines without the
+ * constructor. A missing constructor would otherwise throw inside a timer callback,
+ * i.e. as an uncaught global error, for a purely cosmetic cleanup.
+ * @param type - one of the four leave event names.
+ * @returns the event to dispatch, or null when neither constructor exists.
+ */
+function leaveEvent(type: string): Event | null {
+  const bubbles = type.endsWith('out')
+  try {
+    return new PointerEvent(type, { bubbles, composed: true })
+  } catch {
+    // No PointerEvent constructor on this engine.
+  }
+  try {
+    return new MouseEvent(type, { bubbles, composed: true })
+  } catch {
+    return null
+  }
+}
+
+/**
  * Report the pointer as having left the anchor of every visible tooltip.
  *
  * The anchor is resolved the way the host builds these: the tooltip is a sibling of the
@@ -59,7 +84,8 @@ function releaseTooltips(): number {
       // Not bubbles: the host listens for the leave on the control itself, and a
       // leaving pointer does not re-enter anything on its way out.
       for (const type of ['pointerout', 'pointerleave', 'mouseout', 'mouseleave']) {
-        target.dispatchEvent(new PointerEvent(type, { bubbles: type.endsWith('out'), composed: true }))
+        const event = leaveEvent(type)
+        if (event !== null) target.dispatchEvent(event)
       }
       told += 1
     }
@@ -68,20 +94,19 @@ function releaseTooltips(): number {
 }
 
 /**
- * Install the dismissal. Idempotent per page; disposed with the plugin.
+ * Install the dismissal. Disposed with the plugin.
  * @returns disposer removing the listeners.
  */
 export function installTooltipDismiss(): () => void {
   if (typeof document === 'undefined' || typeof document.addEventListener !== 'function') return () => {}
   let timer: number | undefined
-  let released = 0
 
   const arm = (): void => {
     if (!window.matchMedia(PHONE_MEDIA).matches) return
     if (timer !== undefined) window.clearTimeout(timer)
     timer = window.setTimeout(() => {
       timer = undefined
-      released += releaseTooltips()
+      releaseTooltips()
     }, TOOLTIP_LINGER_MS)
   }
 
@@ -92,6 +117,5 @@ export function installTooltipDismiss(): () => void {
     if (timer !== undefined) window.clearTimeout(timer)
     document.removeEventListener('touchend', arm, { capture: true })
     document.removeEventListener('click', arm, { capture: true })
-    void released
   }
 }

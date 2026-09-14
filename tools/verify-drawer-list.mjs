@@ -73,6 +73,33 @@ console.log(`navigating ${appUrl.replace(/token=.*/, 'token=<redacted>')}`)
 await send('Page.navigate', { url: appUrl })
 await sleep(9000)
 
+// The drawer groups sessions under the ACTIVE session's workspace and step 2 asserts
+// that exactly one row is marked active, so this suite needs a session open. If the
+// app restored one, use it; otherwise open the drawer once and pick the first
+// session, then let the flow below open the drawer again for the assertions. Doing
+// this here is what makes the run independent of the previous suite's leftovers.
+const sessionOpen = async () => (await evaluate(`(() => {
+  const h = document.querySelector('[data-slot="conversation.session.header"] header')
+  if (h === null || h.className.includes('Hidden')) return false
+  return h.querySelector('[class*="_crumbs"]') !== null
+})()`)) === true
+
+if (!(await sessionOpen())) {
+  console.log('  no session restored; opening one first')
+  await evaluate(`document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]').click()`)
+  await sleep(1500)
+  const picked = await evaluate(`(() => {
+    const row = document.querySelector('[data-dsh-mobile-ui="drawer-session"]')
+    if (row === null) return 'no-row'
+    row.click(); return 'clicked'
+  })()`)
+  console.log(`  session pick: ${picked}`)
+  if (picked !== 'clicked') {
+    throw new Error('cannot run: no session could be opened (the drawer rendered no session rows)')
+  }
+  await sleep(4000)
+}
+
 // Open the drawer.
 console.log(`trigger: ${await evaluate(`(() => {
   const t = document.querySelector('[data-dsh-mobile-ui="drawer-trigger"]')

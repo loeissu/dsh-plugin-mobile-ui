@@ -77,7 +77,19 @@ const before = await ui()
 const socksBefore = JSON.parse(await ev(`JSON.stringify(window.__wsLog)`)).length
 console.log('  before:', JSON.stringify(before), 'sockets:', socksBefore)
 await ev(`document.querySelector('[data-dsh-mobile-ui="drawer-refresh"]').click()`)
-await sleep(2500)
+// Sample INSIDE the busy window. The design deliberately holds `busy` for at least
+// 700ms so a tap on an already-healthy wire still acknowledges itself, and the label
+// during that window is the whole point of this file: it used to read 已刷新 — a
+// success claim issued before the wire had confirmed anything. Sampling at 2.5s only
+// (as this suite used to) always sees the settled label, so it stayed green both
+// before and after that bug was fixed. This is the assertion that pins it down.
+await sleep(300)
+const busy = await ui()
+console.log('  during:', JSON.stringify(busy))
+check(busy.label === '刷新中…',
+  'while the wire is being checked the button reports progress, never success',
+  `label=${busy.label}`)
+await sleep(2200)
 const after = await ui()
 const log = JSON.parse(await ev(`JSON.stringify(window.__wsLog)`))
 console.log('  after :', JSON.stringify(after))
@@ -130,11 +142,26 @@ check(stillDead.label === '重试', 'offering another retry, not a reload', `lab
 
 console.log('\n## 4. and it heals itself once the host answers again, with no tap')
 await ev(`(() => { window.fetch = window.__realFetch; return 'restored' })()`)
-// The retry loop runs on its own (4s cadence); wait past one attempt.
-await sleep(6500)
-const healed = await ui()
-console.log('  after the host came back:', JSON.stringify(healed))
-check(healed.dead === 'false' && healed.label === '刷新连接', 'the dead state clears by itself', JSON.stringify(healed))
+// Poll for the heal rather than sleeping a fixed window. The retry loop fires on a
+// 4s cadence, so a single fixed sleep races it: the next attempt can land anywhere in
+// [0, 4s), and one transient probe failure re-arms another full 4s. This assertion is
+// about the loop recovering on its own, so it waits for the CONDITION and reports how
+// long it took — a flat 6.5s sleep made this suite intermittently red while the
+// product was fine (observed once: heal missed the window, then passed on a re-run).
+const HEAL_DEADLINE_MS = 12000
+const healStarted = Date.now()
+let healed = await ui()
+while (healed.dead !== 'false' && Date.now() - healStarted < HEAL_DEADLINE_MS) {
+  await sleep(250)
+  healed = await ui()
+}
+const healMs = Date.now() - healStarted
+console.log('  after the host came back:', JSON.stringify(healed), `healed after ${healMs}ms`)
+check(healed.dead === 'false' && healed.label === '刷新连接',
+  'the dead state clears by itself', `${JSON.stringify(healed)} (waited ${healMs}ms)`)
+check(healMs < HEAL_DEADLINE_MS,
+  'and it heals within a couple of retry periods, not eventually',
+  `${healMs}ms < ${HEAL_DEADLINE_MS}ms`)
 check(await ev(`window.__noReload === true`) === true, 'still without navigating', 'same document')
 check(healed.dot === 'connected', 'and the dot returns to connected', `dot=${healed.dot}`)
 
