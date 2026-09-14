@@ -35,7 +35,8 @@
     "lib/index.js",
     "lib/client.js",
     "lib/client.js.map",
-    "cordis.patch.yml"
+    "cordis.patch.yml",
+    "NOTICE.md"
   ],
   "scripts": {
     "prebundle": "node check-css-backticks.mjs",
@@ -44,6 +45,11 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.2"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.2",

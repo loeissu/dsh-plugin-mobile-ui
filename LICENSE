@@ -19,15 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-## Note on third-party marks and affiliations
-
-This is an independent community project. It is **not** affiliated with,
-authorised by, partnered with, or endorsed by DeepSeek or by the maintainers of
-any of the projects it interoperates with (DeepSeek Harness, dsh-tether).
-
-"DeepSeek", "DeepSeek Harness" and "dsh" identify the upstream platforms this
-plugin extends. They are used descriptively to state compatibility, not to
-claim any authorisation.

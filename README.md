@@ -1,4 +1,4 @@
-﻿# dsh-plugin-mobile-ui
+# dsh-plugin-mobile-ui
 
 把 DeepSeek Harness 的 Web 界面改造成**手机能用**的界面。以官方 slot 客户端插件交付：不改 DSH 源码、不 fork dsh-tether、不替换 `sidebar` 插槽。
 
@@ -11,6 +11,29 @@
 ---
 
 ## 装
+
+### 方式一：从发布包安装（使用者推荐）
+
+到 [Releases](https://github.com/loeissu/dsh-plugin-mobile-ui/releases) 下载 `dsh-plugin-mobile-ui-<版本>.tgz`，
+**放在一个不会被清理的固定目录**（**不要放 `%TEMP%`**），然后：
+
+```sh
+dsh plugin --profile web add <那个 tgz 的完整路径>
+```
+
+发布包**已自带构建产物 `lib/`**，不需要自己构建。
+
+> ⚠️ **不要删掉那个 tgz。** 它的路径会被写进 profile 的 `package.json`（`file:` 引用），
+> 而 pnpm 每次操作都会重新解析整棵依赖树 —— 文件一旦消失，**之后装 / 卸载任何插件都会失败**：
+>
+> ```
+> Could not install from "…/dsh-plugin-mobile-ui-0.1.0.tgz" as it does not exist.
+> ```
+>
+> 把文件放回**同一路径**即可恢复。运行时不受影响（已装好的插件照常工作）——
+> 所以这个问题会在"下次装插件"时才暴露，尤其难查。
+
+### 方式二：从源码安装（开发者推荐）
 
 ```sh
 git clone https://github.com/loeissu/dsh-plugin-mobile-ui.git
