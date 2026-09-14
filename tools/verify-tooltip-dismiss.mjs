@@ -48,6 +48,12 @@ const VISIBLE = `(() => {
 })()`
 
 const boot = async ({ touch, width, height }) => {
+  // A hidden page never acknowledges `Input.dispatchTouchEvent`: measured, the tab
+  // reported document.hidden true and every touch dispatch timed out while the page
+  // itself answered evaluates in 1ms, and `Page.bringToFront` did NOT help. Focus
+  // emulation clears document.hidden and the same dispatch acks in ~10ms, so this
+  // suite works whether the browser window is visible or not.
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setTouchEmulationEnabled', { enabled: touch, maxTouchPoints: touch ? 5 : 1 })
   await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: touch ? 2 : 1, mobile: touch })
   await send('Page.navigate', { url: appUrl })

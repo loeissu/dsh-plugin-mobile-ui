@@ -51,6 +51,11 @@ const activeTab = async () => ev(`(() => {
 })()`)
 
 await send('Runtime.enable'); await send('Page.enable')
+// A hidden page never acknowledges `Input.dispatchTouchEvent`: measured, with
+// document.hidden true every touch dispatch timed out while evaluates answered in
+// 1ms, and `Page.bringToFront` did not help. Focus emulation clears document.hidden
+// and the dispatch acks in ~10ms, so this runs with or without a visible window.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true })
 await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
 await send('Emulation.setDeviceMetricsOverride', { width: 412, height: 915, deviceScaleFactor: 2, mobile: true })
 await send('Page.navigate', { url: appUrl })

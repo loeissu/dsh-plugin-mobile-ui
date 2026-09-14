@@ -80,6 +80,12 @@ await send('Emulation.setFocusEmulationEnabled', { enabled: true })
 
 /** Boot the app with the async clipboard already failing (or not), and open a session. */
 const boot = async ({ rejectAsync, touch, width, height }) => {
+  // A hidden page never acknowledges `Input.dispatchTouchEvent` (measured: with
+  // document.hidden true every touch dispatch timed out while evaluates answered in
+  // 1ms, and `Page.bringToFront` did not help). Focus emulation clears
+  // document.hidden and the dispatch acks in ~10ms, so this runs whether the browser
+  // window is visible or not.
+  await send('Emulation.setFocusEmulationEnabled', { enabled: true })
   await send('Emulation.setTouchEmulationEnabled', { enabled: touch, maxTouchPoints: touch ? 5 : 1 })
   await send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: touch ? 2 : 1, mobile: touch })
   if (rejectAsync) {

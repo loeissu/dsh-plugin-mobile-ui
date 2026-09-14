@@ -84,6 +84,10 @@ await sleep(9000)
 //    upward (scrollTop increases) and a transcript parked at the bottom of a long
 //    session cannot move — that is what made this control report "no scroll" and
 //    stopped the run before it ever reached the drawer.
+// A third, found later: a HIDDEN page never acknowledges Input.dispatchTouchEvent at
+// all (measured: with document.hidden true every dispatch timed out while evaluates
+// answered in 1ms, and Page.bringToFront did not help). Focus emulation clears it.
+await send('Emulation.setFocusEmulationEnabled', { enabled: true })
 await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 })
 const control = JSON.parse(await evaluate(`(() => {
   const el = [...document.querySelectorAll('*')].find((e) => {
