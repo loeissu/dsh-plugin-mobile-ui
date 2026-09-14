@@ -1,4 +1,4 @@
-# dsh-plugin-mobile-ui
+﻿# dsh-plugin-mobile-ui
 
 把 DeepSeek Harness 的 Web 界面改造成**手机能用**的界面。以官方 slot 客户端插件交付：不改 DSH 源码、不 fork dsh-tether、不替换 `sidebar` 插槽。
 
@@ -83,7 +83,7 @@ node tools/verify-render.mjs <url>              # 有浏览器时：逐项 CDP �
 
 `<url>` 是带 token 的地址，形如 `http://127.0.0.1:3080/?token=<TOKEN>`（从 `dsh web` 的输出或 `H:\DSH\dsh-web.log` 里取）。
 
-主要套件（`tools/`，共 30 个，全部通过；`tools/retired/` 里三个断言的是已放弃的设计，不参与）：
+主要套件（`tools/`，共 33 个，全部通过；`tools/retired/` 里三个断言的是已放弃的设计，不参与）：
 
 | 套件 | 保证什么 |
 |---|---|
